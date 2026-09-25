@@ -1,0 +1,1 @@
+const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); async function test() { try { await prisma.task.update({ where: { id: 'cmufasw4z0002cgzkeie2owlx' }, data: { priority: 2 } }); console.log('success'); } catch(e) { console.error(e) } } test()

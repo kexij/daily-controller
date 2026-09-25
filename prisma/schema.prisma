@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String         @id @default(cuid())
+  email     String         @unique
+  name      String?
+  summaries DailySummary[]
+  habits    Habit[]
+  tasks     Task[]
+  weeklySummaries WeeklySummary[]
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  dueDate     DateTime
+  priority    Int      @default(1)
+  isCompleted Boolean  @default(false)
+  isOverdue   Boolean  @default(false)
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  description String?
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model Habit {
+  id        String     @id @default(cuid())
+  title     String
+  icon      String?
+  streak    Int        @default(0)
+  userId    String
+  createdAt DateTime   @default(now())
+  user      User       @relation(fields: [userId], references: [id])
+  logs      HabitLog[]
+}
+
+model HabitLog {
+  id          String   @id @default(cuid())
+  date        DateTime
+  isCompleted Boolean  @default(true)
+  habitId     String
+  habit       Habit    @relation(fields: [habitId], references: [id])
+}
+
+model DailySummary {
+  id      String   @id @default(cuid())
+  date    DateTime
+  content String
+  userId  String
+  user    User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, date])
+}
+
+model WeeklySummary {
+  id      String   @id @default(cuid())
+  year    Int
+  week    Int
+  content String
+  userId  String
+  user    User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, year, week])
+}
+
+
