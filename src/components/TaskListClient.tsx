@@ -83,7 +83,7 @@ export default function TaskListClient({ tasks }: { tasks: any[] }) {
                   {isOverdue ? (
                     <><AlertCircle className="w-3 h-3 mr-1" />逾期未完成</>
                   ) : (
-                    <><Clock className="w-3 h-3 mr-1" />{taskDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 截止</>
+                    <>{taskDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) === '23:59' ? <><Clock className="w-3 h-3 mr-1" />全天</> : <><Clock className="w-3 h-3 mr-1" />{taskDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 截止</>}</>
                   )}
                 </div>
               </button>
@@ -144,3 +144,6 @@ export default function TaskListClient({ tasks }: { tasks: any[] }) {
     </>
   )
 }
+
+
+

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { saveWeeklySummary } from '@/app/actions';
 
 export default function WeeklySummaryClient({ initialContent, year, week }: { initialContent: string, year: number, week: number }) {
@@ -30,7 +31,10 @@ export default function WeeklySummaryClient({ initialContent, year, week }: { in
         placeholder="这周整体感觉如何？有哪些需要调整的习惯？" 
         className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 h-32 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white transition-all"
       />
-      <div className="flex justify-end mt-3">
+      <div className="flex justify-end items-center gap-4 mt-3">
+        <Link href={`/data-center/week/${year}/${week}`} className="text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors underline underline-offset-4 decoration-slate-200 hover:decoration-slate-400">
+          查看详情记录
+        </Link>
         <button 
           onClick={handleSave}
           disabled={isSaving}

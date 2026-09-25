@@ -3,10 +3,13 @@
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 
-const USER_EMAIL = 'kexi@example.com'
+import { getSession, createSession, clearSession } from '@/lib/session';
+import bcrypt from 'bcryptjs';
 
-async function getUser() {
-  return await prisma.user.findUnique({ where: { email: USER_EMAIL } })
+export async function getUser() {
+  const session = await getSession();
+  if (!session?.userId) return null;
+  return await prisma.user.findUnique({ where: { id: session.userId } });
 }
 
 export async function getDashboardData() {
@@ -199,4 +202,72 @@ export async function getOverdueTasks() {
     },
     orderBy: { dueDate: 'asc' }
   });
+}
+
+export async function getDataCenterData() {
+  const user = await getUser();
+  if (!user) return { futureTasks: [], weeklySummaries: [], dailySummaries: [], completedTasks: [] };
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const futureTasks = await prisma.task.findMany({
+    where: { userId: user.id, isCompleted: false, dueDate: { gte: todayStart } },
+    orderBy: { dueDate: 'asc' }
+  });
+  const weeklySummaries = await prisma.weeklySummary.findMany({
+    where: { userId: user.id },
+    orderBy: [{ year: 'desc' }, { week: 'desc' }]
+  });
+  const dailySummaries = await prisma.dailySummary.findMany({
+    where: { userId: user.id },
+    orderBy: { date: 'desc' }
+  });
+  const completedTasks = await prisma.task.findMany({
+    where: { userId: user.id, isCompleted: true },
+    orderBy: { updatedAt: 'desc' }
+  });
+  return { futureTasks, weeklySummaries, dailySummaries, completedTasks };
+}
+
+
+export async function login(formData: FormData) {
+  const username = formData.get('username') as string;
+  const password = formData.get('password') as string;
+  
+  if (!username || !password) throw new Error('Missing fields');
+  
+  const user = await prisma.user.findUnique({ where: { username } });
+  if (!user) throw new Error('Invalid username or password');
+  
+  const isValid = await bcrypt.compare(password, user.password);
+  if (!isValid) throw new Error('Invalid username or password');
+  
+  await createSession(user.id);
+}
+
+export async function register(formData: FormData) {
+  const username = formData.get('username') as string;
+  const password = formData.get('password') as string;
+  const name = formData.get('name') as string;
+  
+  if (!username || !password) throw new Error('Missing fields');
+  
+  const existing = await prisma.user.findUnique({ where: { username } });
+  if (existing) throw new Error('Username already taken');
+  
+  const hashedPassword = await bcrypt.hash(password, 10);
+  
+  const user = await prisma.user.create({
+    data: {
+      username,
+      password: hashedPassword,
+      name: name || username
+    }
+  });
+  
+  await createSession(user.id);
+}
+
+export async function logout() {
+  await clearSession();
 }

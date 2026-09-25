@@ -1,11 +1,13 @@
 import React from 'react';
 import { Check, AlertCircle } from 'lucide-react';
+import { getUser } from './actions';
 import Link from 'next/link';
 import { getDashboardData, toggleHabitCheckIn } from './actions';
 import TaskListClient from '@/components/TaskListClient';
 import AddFAB from '@/components/AddFAB';
 
 export default async function Dashboard() {
+  const user = await getUser();
   const { tasks, habits } = await getDashboardData();
   
   const completedTasks = tasks.filter(t => t.isCompleted).length;
@@ -16,7 +18,7 @@ export default async function Dashboard() {
       <main className="max-w-md mx-auto p-6 pt-12 sm:pt-16">
         {/* Header */}
         <header className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">你好，Kexi 👋</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">{user ? `你好，${user.name} 👋` : <Link href="/login" className="text-blue-600 hover:underline">你好，请登录 👋</Link>}</h1>
           <p className="text-slate-500 mt-1.5 text-sm font-medium">今天是 {new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}</p>
         </header>
 
@@ -86,3 +88,4 @@ export default async function Dashboard() {
     </div>
   );
 }
+

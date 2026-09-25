@@ -2,33 +2,16 @@ import React from 'react';
 import { getStatsData } from '@/app/actions';
 import { Flame, Target, BookOpen } from 'lucide-react';
 import DailySummaryForm from '@/components/DailySummaryForm';
-import WeeklySummaryClient from '@/components/WeeklySummaryClient';
-import { getWeeklySummary } from '@/app/actions';
+import StatsSidebar from '@/components/StatsSidebar';
 
 export default async function StatsPage() {
   const { todayTasks, todayCompleted, habits, summary } = await getStatsData();
-  
-  const now = new Date();
-  const year = now.getFullYear();
-  const getWeekNumber = (d: Date) => {
-    const date = new Date(d.getTime());
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
-    const week1 = new Date(date.getFullYear(), 0, 4);
-    return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
-  };
-  const week = getWeekNumber(now);
-  const weeklySummary = await getWeeklySummary(year, week);
-
   const completionRate = todayTasks === 0 ? 0 : Math.round((todayCompleted / todayTasks) * 100);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-28">
       <main className="max-w-md mx-auto p-6 pt-12 sm:pt-16">
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">执行复盘 📊</h1>
-          <p className="text-slate-500 mt-1.5 text-sm font-medium">数据见证你的每一次坚持</p>
-        </header>
+        <StatsSidebar />
 
         {/* Today's Rate */}
         <section className="mb-8 bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex items-center justify-between">
@@ -64,15 +47,6 @@ export default async function StatsPage() {
             今日心得
           </h2>
           <DailySummaryForm initialContent={summary?.content || ''} />
-        </section>
-
-        {/* Weekly Summary */}
-        <section className="mb-8">
-          <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center">
-            <BookOpen className="w-5 h-5 text-indigo-500 mr-2" />
-            本周复盘 (第{week}周)
-          </h2>
-          <WeeklySummaryClient initialContent={weeklySummary?.content || ''} year={year} week={week} />
         </section>
 
         {/* Habits Streaks */}
