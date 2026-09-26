@@ -118,17 +118,19 @@ export async function updateTaskDetails(taskId: string, title: string, descripti
 }
 export async function createTask(data: { title: string; description: string; dueDate: Date }) {
   const user = await getUser()
-  if (!user) return
+  if (!user) return { ok: false as const, error: '请先登录' }
   await prisma.task.create({ data: { ...data, userId: user.id } })
   revalidatePath('/')
   revalidatePath('/stats')
+  return { ok: true as const }
 }
 export async function createHabit(data: { title: string; icon: string }) {
   const user = await getUser()
-  if (!user) return
+  if (!user) return { ok: false as const, error: '请先登录' }
   await prisma.habit.create({ data: { ...data, userId: user.id } })
   revalidatePath('/')
   revalidatePath('/stats')
+  return { ok: true as const }
 }
 export async function toggleHabitCheckIn(habitId: string) {
   const user = await getUser()
@@ -234,15 +236,16 @@ export async function login(formData: FormData) {
   const username = formData.get('username') as string;
   const password = formData.get('password') as string;
   
-  if (!username || !password) throw new Error('Missing fields');
+  if (!username || !password) return { error: '请填写完整信息' };
   
   const user = await prisma.user.findUnique({ where: { username } });
-  if (!user) throw new Error('Invalid username or password');
+  if (!user) return { error: '账号或密码错误' };
   
   const isValid = await bcrypt.compare(password, user.password);
-  if (!isValid) throw new Error('Invalid username or password');
+  if (!isValid) return { error: '账号或密码错误' };
   
   await createSession(user.id);
+  return { success: true };
 }
 
 export async function register(formData: FormData) {
@@ -250,10 +253,10 @@ export async function register(formData: FormData) {
   const password = formData.get('password') as string;
   const name = formData.get('name') as string;
   
-  if (!username || !password) throw new Error('Missing fields');
+  if (!username || !password) return { error: '请填写完整信息' };
   
   const existing = await prisma.user.findUnique({ where: { username } });
-  if (existing) throw new Error('Username already taken');
+  if (existing) return { error: '该账号已被注册' };
   
   const hashedPassword = await bcrypt.hash(password, 10);
   
@@ -266,8 +269,10 @@ export async function register(formData: FormData) {
   });
   
   await createSession(user.id);
+  return { success: true };
 }
 
 export async function logout() {
   await clearSession();
 }
+

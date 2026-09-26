@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { saveWeeklySummary } from '@/app/actions';
+import { toast } from '@/components/Feedback';
 
 export default function WeeklySummaryClient({ initialContent, year, week }: { initialContent: string, year: number, week: number }) {
   const [content, setContent] = useState(initialContent);
@@ -15,9 +16,10 @@ export default function WeeklySummaryClient({ initialContent, year, week }: { in
       await saveWeeklySummary(year, week, content);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
+      toast.success('周复盘已保存');
     } catch (e) {
       console.error(e);
-      alert('保存周复盘失败');
+      toast.error('保存失败，请重试');
     } finally {
       setIsSaving(false);
     }

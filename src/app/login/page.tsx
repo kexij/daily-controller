@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { login } from '@/app/actions';
+import { toast } from '@/components/Feedback';
 
 export default function LoginPage() {
   const [error, setError] = useState('');
@@ -16,9 +17,14 @@ export default function LoginPage() {
     setLoading(true);
     const formData = new FormData(e.currentTarget);
     try {
-      await login(formData);
-      router.push('/');
-      router.refresh();
+      const res = await login(formData);
+      if (res && res.error) {
+        setError(res.error);
+      } else {
+        toast.success('登录成功');
+        router.push('/');
+        router.refresh();
+      }
     } catch (err: any) {
       setError(err.message || '登录失败');
     } finally {
@@ -32,7 +38,7 @@ export default function LoginPage() {
         <h1 className="text-2xl font-bold text-slate-900 mb-6 text-center">欢迎回来 👋</h1>
         
         {error && (
-          <div className="bg-red-50 text-red-600 text-sm p-3 rounded-xl mb-4 text-center">
+          <div className="bg-red-50 text-red-600 text-sm p-3 rounded-xl mb-4 text-center font-medium">
             {error}
           </div>
         )}

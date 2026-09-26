@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { CheckCircle2, Circle, Clock, X, AlertCircle } from 'lucide-react';
 import { toggleTask, updateTaskDetails, deleteTask } from '@/app/actions';
+import { toast, confirmDialog } from '@/components/Feedback';
 
 export default function TaskListClient({ tasks }: { tasks: any[] }) {
   const [selectedTask, setSelectedTask] = useState<any>(null);
@@ -16,24 +17,32 @@ export default function TaskListClient({ tasks }: { tasks: any[] }) {
     e.preventDefault();
     setIsSubmitting(true);
     const formData = new FormData(e.currentTarget);
-    await updateTaskDetails(
-      selectedTask.id,
-      formData.get('title') as string,
-      formData.get('description') as string
-    );
-    setIsSubmitting(false);
-    setSelectedTask(null);
+    try {
+      await updateTaskDetails(
+        selectedTask.id,
+        formData.get('title') as string,
+        formData.get('description') as string
+      );
+      setSelectedTask(null);
+      toast.success('任务已保存');
+    } catch (error) {
+      console.error(error);
+      toast.error('保存失败，请重试');
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   async function handleDelete() {
-    if (!confirm('确定要删除这个任务吗？')) return;
+    if (!(await confirmDialog('确定要删除这个任务吗？'))) return;
     setIsSubmitting(true);
     try {
       await deleteTask(selectedTask.id);
       setSelectedTask(null);
+      toast.success('任务已删除');
     } catch (error) {
       console.error(error);
-      alert('删除失败，请重试');
+      toast.error('删除失败，请重试');
     } finally {
       setIsSubmitting(false);
     }

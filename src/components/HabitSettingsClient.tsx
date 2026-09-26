@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { updateHabit, deleteHabit, createHabit } from '@/app/actions';
 import { Trash2, Edit2, Check, X, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { toast, confirmDialog } from '@/components/Feedback';
 
 const PRESET_ICONS = ['✨', '📖', '🏃', '💧', '🍎', '💤', '🧘', '✍️', '🎸', '💻', '🏋️', '🍳'];
 
@@ -34,36 +35,46 @@ export default function HabitSettingsClient({ initialHabits }: { initialHabits: 
       await updateHabit(id, editForm);
       setEditingId(null);
       router.refresh();
+      toast.success('习惯已更新');
     } catch (e) {
       console.error(e);
-      alert('更新失败，请重试');
+      toast.error('更新失败，请重试');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('确定要删除这个习惯吗？（相关的打卡记录也会被删除）')) return;
+    if (!(await confirmDialog('确定要删除这个习惯吗？（相关的打卡记录也会被删除）'))) return;
     try {
       await deleteHabit(id);
       router.refresh();
+      toast.success('习惯已删除');
     } catch (e) {
       console.error(e);
-      alert('删除失败，请重试');
+      toast.error('删除失败，请重试');
     }
   };
 
   const handleAdd = async () => {
-    if (!addForm.title.trim()) return alert('请输入习惯名称');
+    if (!addForm.title.trim()) {
+      toast.error('请输入习惯名称');
+      return;
+    }
     setIsSaving(true);
     try {
-      await createHabit(addForm);
+      const res = await createHabit(addForm);
+      if (res && res.ok === false) {
+        toast.error(res.error);
+        return;
+      }
       setAddForm({ title: '', icon: '✨' });
       setIsAdding(false);
       router.refresh();
+      toast.success('习惯已添加');
     } catch (e) {
       console.error(e);
-      alert('添加失败，请重试');
+      toast.error('添加失败，请重试');
     } finally {
       setIsSaving(false);
     }

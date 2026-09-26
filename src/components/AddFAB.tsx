@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { createTask } from '@/app/actions';
+import { toast } from '@/components/Feedback';
 
 export default function AddFAB() {
   const [isOpen, setIsOpen] = useState(false);
@@ -26,18 +27,22 @@ export default function AddFAB() {
         }
         const dueDate = new Date(`${dateStr}T${timeStr}:00`);
         
-        await createTask({
+        const res = await createTask({
           title: formData.get('title') as string,
           description: formData.get('description') as string,
           dueDate
         });
-        alert('任务创建成功！');
+        if (res && res.ok === false) {
+          toast.error(res.error);
+          return;
+        }
+        toast.success('任务创建成功');
         
         setIsOpen(false);
         router.refresh();
       } catch (error) {
         console.error(error);
-        alert('创建失败，请重试');
+        toast.error('创建失败，请重试');
       } finally {
         setIsSubmitting(false);
       }

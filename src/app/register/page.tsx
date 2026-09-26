@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { register } from '@/app/actions';
+import { toast } from '@/components/Feedback';
 
 export default function RegisterPage() {
   const [error, setError] = useState('');
@@ -16,9 +17,14 @@ export default function RegisterPage() {
     setLoading(true);
     const formData = new FormData(e.currentTarget);
     try {
-      await register(formData);
-      router.push('/');
-      router.refresh();
+      const res = await register(formData);
+      if (res && res.error) {
+        setError(res.error);
+      } else {
+        toast.success('注册成功');
+        router.push('/');
+        router.refresh();
+      }
     } catch (err: any) {
       setError(err.message || '注册失败');
     } finally {
@@ -32,7 +38,7 @@ export default function RegisterPage() {
         <h1 className="text-2xl font-bold text-slate-900 mb-6 text-center">创建账号 ✨</h1>
         
         {error && (
-          <div className="bg-red-50 text-red-600 text-sm p-3 rounded-xl mb-4 text-center">
+          <div className="bg-red-50 text-red-600 text-sm p-3 rounded-xl mb-4 text-center font-medium">
             {error}
           </div>
         )}
