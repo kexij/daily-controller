@@ -1,8 +1,31 @@
 import { SignJWT, jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 
 const secretKey = process.env.JWT_SECRET || 'super-secret-key-for-dev';
 const key = new TextEncoder().encode(secretKey);
+
+/**
+ * 判断当前会话 Cookie 是否需要带上 Secure 标记。
+ *
+ * 注意：带 Secure 的 Cookie 只在 HTTPS（或 localhost）下才会被浏览器保存。
+ * 直接通过 http://ip:3000 访问时如果带上 Secure，浏览器会直接丢弃，
+ * 表现就是「登录提示成功，但刷新后又是未登录、数据读不出来」。
+ */
+async function useSecureCookie() {
+  const override = process.env.SESSION_COOKIE_SECURE;
+  if (override === 'true') return true;
+  if (override === 'false') return false;
+
+  const requestHeaders = await headers();
+  const forwardedProto = requestHeaders
+    .get('x-forwarded-proto')
+    ?.split(',')[0]
+    .trim()
+    .toLowerCase();
+  if (forwardedProto) return forwardedProto === 'https';
+
+  return requestHeaders.get('x-forwarded-ssl')?.toLowerCase() === 'on';
+}
 
 export async function encrypt(payload: any) {
   return await new SignJWT(payload)
@@ -36,7 +59,7 @@ export async function createSession(userId: string) {
   const cookieStore = await cookies();
   cookieStore.set('session', session, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: await useSecureCookie(),
     expires,
     sameSite: 'lax',
     path: '/',
