@@ -17,11 +17,11 @@ export default function TasksClient({ initialTasks }: { initialTasks: any[] }) {
   };
 
   const handleDelete = async (taskId: string) => {
-    confirmDialog('确定要删除这个任务吗？', async () => {
-      await deleteTask(taskId);
-      toast.success('已删除任务');
-      router.refresh();
-    });
+    const ok = await confirmDialog('确定要删除这个任务吗？');
+    if (!ok) return;
+    await deleteTask(taskId);
+    toast.success('已删除任务');
+    router.refresh();
   };
 
   const todayStr = new Date().toLocaleDateString('en-CA'); // Gets YYYY-MM-DD reliably in local time
@@ -66,7 +66,7 @@ export default function TasksClient({ initialTasks }: { initialTasks: any[] }) {
     <div className="flex flex-col gap-6 animate-in fade-in duration-300">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href="/" className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors">
+        <Link href="/stats" className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors">
           <ChevronLeft className="w-5 h-5" />
         </Link>
         <div>
@@ -155,3 +155,5 @@ export default function TasksClient({ initialTasks }: { initialTasks: any[] }) {
     </div>
   );
 }
+
+

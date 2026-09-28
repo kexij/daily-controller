@@ -1,11 +1,13 @@
 
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { createTask, createMemo } from '@/app/actions';
 import { toast } from '@/components/Feedback';
+import CustomDatePicker from './CustomDatePicker';
+import CustomTimePicker from './CustomTimePicker';
 
 export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -18,6 +20,11 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
   const [taskDate, setTaskDate] = useState(todayStr);
   const [taskTime, setTaskTime] = useState('');
   const [taskSpan, setTaskSpan] = useState('当天');
+  const [showSpanDropdown, setShowSpanDropdown] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  const timeInputRef = useRef<HTMLInputElement>(null);
   
   // Idea specific state
   const [selectedTags, setSelectedTags] = useState<string[]>(['灵感']);
@@ -192,39 +199,53 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
                 <div className="flex flex-wrap items-center gap-2.5">
                   {/* 执行日期 */}
                   <div className="relative">
-                    <button type="button" className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white border border-slate-200/80 text-slate-700 text-[12px] font-semibold transition-all shadow-sm">
+                    <button type="button" onClick={() => setShowDatePicker(!showDatePicker)} className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white border border-slate-200/80 text-slate-700 text-[12px] font-semibold transition-all shadow-sm">
                       <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                       {taskDate === todayStr ? '今天' : taskDate}
                     </button>
-                    <input type="date" value={taskDate} onChange={e => setTaskDate(e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" required />
+                      {showDatePicker && <CustomDatePicker value={taskDate} onChange={setTaskDate} onClose={() => setShowDatePicker(false)} />}
                   </div>
-
+                  
                   {/* 截止时间 */}
                   <div className="relative">
-                    <button type="button" className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border transition-all text-[12px] font-medium ${taskTime ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'bg-white border-slate-200/80 text-slate-500 shadow-sm hover:border-slate-300'}`}>
+                    <button type="button" onClick={() => setShowTimePicker(!showTimePicker)} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border transition-all text-[12px] font-medium ${taskTime ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'bg-white border-slate-200/80 text-slate-500 shadow-sm hover:border-slate-300'}`}>
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                       {taskTime || '截止时间'}
                     </button>
-                    <input type="time" value={taskTime} onChange={e => setTaskTime(e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                      {showTimePicker && <CustomTimePicker value={taskTime} onChange={setTaskTime} onClose={() => setShowTimePicker(false)} />}
                   </div>
 
                   {/* 任务跨度 (短期/中期/长期) */}
-                  <div className="ml-auto relative">
-                    <button type="button" className="flex items-center gap-1 px-3.5 py-1.5 rounded-full bg-blue-50/60 hover:bg-blue-50 border border-blue-100/50 text-blue-600 text-[12px] font-semibold transition-all shadow-sm">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                      跨度: {taskSpan}
-                      <svg className="w-3.5 h-3.5 text-blue-400 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"></path></svg>
-                    </button>
-                    <select name="span" value={taskSpan} onChange={e => setTaskSpan(e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-                      <option value="当天">当天</option>
-                      <option value="2天">2天</option>
-                      <option value="3天">3天</option>
-                      <option value="5天">5天</option>
-                      <option value="1周">1周</option>
-                      <option value="2周">2周</option>
-                      <option value="长期">长期</option>
-                    </select>
-                  </div>
+                    <div className="ml-auto relative">
+                      <input type="hidden" name="span" value={taskSpan} />
+                      <button 
+                        type="button" 
+                        onClick={() => setShowSpanDropdown(!showSpanDropdown)} 
+                        className="flex items-center gap-1 px-3.5 py-1.5 rounded-full bg-blue-50/60 hover:bg-blue-50 border border-blue-100/50 text-blue-600 text-[12px] font-semibold transition-all shadow-sm"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        跨度: {taskSpan}
+                        <svg className={`w-3.5 h-3.5 text-blue-400 ml-0.5 transition-transform ${showSpanDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"></path></svg>
+                      </button>
+                      
+                      {showSpanDropdown && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowSpanDropdown(false)}></div>
+                          <div className="absolute right-0 bottom-full mb-2 w-28 bg-white rounded-2xl shadow-xl border border-slate-100 py-1.5 z-50 animate-in fade-in slide-in-from-bottom-2">
+                            {['当天', '2天', '3天', '5天', '1周', '2周', '长期'].map(option => (
+                              <button
+                                key={option}
+                                type="button"
+                                onClick={() => { setTaskSpan(option); setShowSpanDropdown(false); }}
+                                className={`w-full text-left px-4 py-2 text-[13px] font-bold transition-colors ${taskSpan === option ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+                              >
+                                {option}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
                 </div>
                 
                 <button type="submit" disabled={isSubmitting} className="w-full mt-1 bg-gradient-to-br from-blue-500 to-blue-600 hover:opacity-90 text-white font-bold py-3.5 rounded-[18px] transition-all active:scale-95 shadow-lg shadow-blue-500/25 text-sm tracking-wide flex justify-center items-center gap-2 disabled:opacity-70">
@@ -289,3 +310,5 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
     </>
   );
 }
+
+

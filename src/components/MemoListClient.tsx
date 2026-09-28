@@ -135,7 +135,6 @@ export default function MemoListClient({
         if (!tags.some(t => t.name === res.tag.name)) {
           setTags([...tags, res.tag]);
         }
-        setSelectedTagsForCreate(prev => [...prev, res.tag.name]);
         setIsAddTagModalOpen(false);
         setNewTagName("");
       } else if (res && res.error) {
@@ -429,3 +428,4 @@ export default function MemoListClient({
     </div>
   );
 }
+

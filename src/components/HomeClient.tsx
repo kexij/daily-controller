@@ -6,7 +6,7 @@ import { toggleTask, updateTaskDetails, deleteTask, toggleHabitCheckIn } from '@
 import { toast, confirmDialog } from '@/components/Feedback';
 import AddFAB from '@/components/AddFAB';
 
-export default function HomeClient({ user, tasks, habits, memos }: { user: any, tasks: any[], habits: any[], memos: any[] }) {
+export default function HomeClient({ user, tasks, habits, memos, isDemo }: { user: any, tasks: any[], habits: any[], memos: any[], isDemo?: boolean }) {
   const router = useRouter();
   const [tab, setTab] = useState<'task' | 'idea'>('task');
   const [isAnimating, setIsAnimating] = useState(false);
@@ -83,14 +83,17 @@ export default function HomeClient({ user, tasks, habits, memos }: { user: any, 
       <div className="w-full max-w-[480px] bg-[#F6F7F9] min-h-screen relative shadow-2xl flex flex-col pb-24 overflow-x-hidden">
       
       {/* Header 问候语 */}
-      <div className="px-6 pt-12 pb-6">
-        <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
-          {user ? `你好，${user.name || user.username}` : '你好，请登录'} <span className="animate-bounce origin-bottom-right">👋</span>
-        </h1>
-        <p className="text-sm text-slate-500 font-medium mt-1">今天是 {mounted ? todayStr : ''}</p>
-      </div>
+        <div className="px-6 pt-12 pb-6 relative">
+          <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2 relative w-max">
+            {user ? `你好，${user.name || user.username}` : <>你好，<span onClick={() => router.push('/login')} className="text-blue-600 hover:text-blue-700 cursor-pointer underline decoration-blue-200 underline-offset-4 transition-colors">请登录</span></>} <span className="animate-bounce origin-bottom-right">👋</span>
+            {isDemo && (
+              <span className="absolute -right-10 -top-3 text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200 shadow-sm opacity-90 rotate-[15deg]">展示样例</span>
+            )}
+          </h1>
+          <p className="text-sm text-slate-500 font-medium mt-1">今天是 {mounted ? todayStr : ''}</p>
+        </div>
 
-      {/* 核心切换区：任务 vs 灵感 */}
+        {/* 核心切换区：任务 vs 灵感 */}
       <div className="px-5 mb-4">
         <div className="flex justify-between items-center">
           
@@ -171,6 +174,14 @@ export default function HomeClient({ user, tasks, habits, memos }: { user: any, 
                       <div className="flex items-center gap-1 text-xs font-bold text-red-500 mt-1.5 bg-red-50 w-fit px-1.5 py-0.5 rounded-md">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         逾期未完成
+                        {(() => {
+                          const spanMatch = task.description?.match(/\[跨度:\s*(.*?)\]/);
+                          const spanText = spanMatch ? spanMatch[1] : null;
+                          if (spanText && spanText !== '当天') {
+                            return <span className="ml-1 px-1.5 py-0.5 bg-red-100 text-red-600 rounded-md text-[10px] tracking-wide">短期</span>;
+                          }
+                          return null;
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -187,7 +198,15 @@ export default function HomeClient({ user, tasks, habits, memos }: { user: any, 
                     <div className="flex items-center gap-1 text-xs font-bold text-blue-500 mt-1.5">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                       {taskDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) === '23:59' ? '全天' : `${taskDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 截止`}
-                    </div>
+                      {(() => {
+                          const spanMatch = task.description?.match(/\[跨度:\s*(.*?)\]/);
+                          const spanText = spanMatch ? spanMatch[1] : null;
+                          if (spanText && spanText !== '当天') {
+                            return <span className="ml-1.5 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-md text-[10px] tracking-wide">短期</span>;
+                          }
+                          return null;
+                        })()}
+                      </div>
                   </div>
                 </div>
               );
@@ -335,5 +354,10 @@ export default function HomeClient({ user, tasks, habits, memos }: { user: any, 
     </div>
   );
 }
+
+
+
+
+
 
 

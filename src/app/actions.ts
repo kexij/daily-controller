@@ -12,10 +12,16 @@ export async function getUser() {
   return await prisma.user.findUnique({ where: { id: session.userId } });
 }
 
-export async function getDashboardData(overrideUserId?: string) {
-  const user = await getUser()
-  const targetId = overrideUserId || user?.id;
-  if (!targetId) return { tasks: [], habits: [] }
+async function getEffectiveUserId() {
+  const user = await getUser();
+  if (user) return user.id;
+  const kexi = await prisma.user.findUnique({ where: { username: 'kexi' } });
+  return kexi?.id;
+}
+
+export async function getDashboardData() {
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return { tasks: [], habits: [] };
 
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
@@ -46,8 +52,8 @@ export async function getDashboardData(overrideUserId?: string) {
 }
 
 export async function getStatsData() {
-  const user = await getUser()
-  if (!user) return { todayTasks: 0, todayCompleted: 0, habits: [], summary: null }
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return { todayTasks: 0, todayCompleted: 0, habits: [], summary: null }
 
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
@@ -56,20 +62,20 @@ export async function getStatsData() {
 
   const todayTasksList = await prisma.task.findMany({
     where: { 
-      userId: user.id,
+      userId: targetId,
       dueDate: { gte: todayStart, lte: todayEnd }
     }
   })
 
   const habits = await prisma.habit.findMany({
-    where: { userId: user.id },
+    where: { userId: targetId },
     orderBy: { streak: 'desc' }
   })
 
   const summary = await prisma.dailySummary.findUnique({
     where: {
       userId_date: {
-        userId: user.id,
+        userId: targetId,
         date: todayStart
       }
     }
@@ -86,6 +92,7 @@ export async function getStatsData() {
 export async function saveDailySummary(content: string) {
   const user = await getUser()
   if (!user) return
+  const targetId = user.id;
 
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
@@ -93,7 +100,7 @@ export async function saveDailySummary(content: string) {
   await prisma.dailySummary.upsert({
     where: {
       userId_date: {
-        userId: user.id,
+        userId: targetId,
         date: todayStart
       }
     },
@@ -101,7 +108,7 @@ export async function saveDailySummary(content: string) {
     create: {
       content,
       date: todayStart,
-      userId: user.id
+      userId: targetId
     }
   })
   revalidatePath('/stats')
@@ -109,18 +116,23 @@ export async function saveDailySummary(content: string) {
 
 // ... other existing functions unchanged ...
 export async function toggleTask(taskId: string, isCompleted: boolean) {
+  const user = await getUser(); if (!user) return;
+
   await prisma.task.update({ where: { id: taskId }, data: { isCompleted } })
   revalidatePath('/')
   revalidatePath('/stats')
 }
 export async function updateTaskDetails(taskId: string, title: string, description: string) {
+  const user = await getUser(); if (!user) return;
+
   await prisma.task.update({ where: { id: taskId }, data: { title, description } })
   revalidatePath('/')
 }
 export async function createTask(data: { title: string; description: string; dueDate: Date }) {
   const user = await getUser()
   if (!user) return { ok: false as const, error: '请先登录' }
-  await prisma.task.create({ data: { ...data, userId: user.id } })
+  const targetId = user.id;
+  await prisma.task.create({ data: { ...data, userId: targetId } })
   revalidatePath('/')
   revalidatePath('/stats')
   return { ok: true as const }
@@ -128,14 +140,14 @@ export async function createTask(data: { title: string; description: string; due
 export async function createHabit(data: { title: string; icon: string }) {
   const user = await getUser()
   if (!user) return { ok: false as const, error: '请先登录' }
-  await prisma.habit.create({ data: { ...data, userId: user.id } })
+  const targetId = user.id;
+  await prisma.habit.create({ data: { ...data, userId: targetId } })
   revalidatePath('/')
   revalidatePath('/stats')
   return { ok: true as const }
 }
 export async function toggleHabitCheckIn(habitId: string) {
-  const user = await getUser()
-  if (!user) return
+  const user = await getUser(); if (!user) return;
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
   const existingLog = await prisma.habitLog.findFirst({ where: { habitId, date: { gte: todayStart } } })
@@ -168,38 +180,41 @@ export async function toggleHabitCheckIn(habitId: string) {
   }
   
 export async function deleteTask(taskId: string) {
+  const user = await getUser(); if (!user) return;
+
   await prisma.task.delete({ where: { id: taskId } })
   revalidatePath('/')
   revalidatePath('/stats')
 }
 
 export async function getWeeklySummary(year: number, week: number) {
-  const user = await getUser();
-  if (!user) return null;
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return null;
   return await prisma.weeklySummary.findUnique({
-    where: { userId_year_week: { userId: user.id, year, week } }
+    where: { userId_year_week: { userId: targetId, year, week } }
   });
 }
 
 export async function saveWeeklySummary(year: number, week: number, content: string) {
   const user = await getUser();
   if (!user) return;
+  const targetId = user.id;
   await prisma.weeklySummary.upsert({
-    where: { userId_year_week: { userId: user.id, year, week } },
+    where: { userId_year_week: { userId: targetId, year, week } },
     update: { content },
-    create: { userId: user.id, year, week, content }
+    create: { userId: targetId, year, week, content }
   });
   revalidatePath('/stats');
 }
 
 export async function getOverdueTasks() {
-  const user = await getUser();
-  if (!user) return [];
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return [];
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   return await prisma.task.findMany({
     where: { 
-      userId: user.id, 
+      userId: targetId, 
       isCompleted: false, 
       dueDate: { lt: todayStart } 
     },
@@ -208,25 +223,25 @@ export async function getOverdueTasks() {
 }
 
 export async function getDataCenterData() {
-  const user = await getUser();
-  if (!user) return { futureTasks: [], weeklySummaries: [], dailySummaries: [], completedTasks: [] };
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return { futureTasks: [], weeklySummaries: [], dailySummaries: [], completedTasks: [] };
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
   const futureTasks = await prisma.task.findMany({
-    where: { userId: user.id, isCompleted: false, dueDate: { gte: todayStart } },
+    where: { userId: targetId, isCompleted: false, dueDate: { gte: todayStart } },
     orderBy: { dueDate: 'asc' }
   });
   const weeklySummaries = await prisma.weeklySummary.findMany({
-    where: { userId: user.id },
+    where: { userId: targetId },
     orderBy: [{ year: 'desc' }, { week: 'desc' }]
   });
   const dailySummaries = await prisma.dailySummary.findMany({
-    where: { userId: user.id },
+    where: { userId: targetId },
     orderBy: { date: 'desc' }
   });
   const completedTasks = await prisma.task.findMany({
-    where: { userId: user.id, isCompleted: true },
+    where: { userId: targetId, isCompleted: true },
     orderBy: { updatedAt: 'desc' }
   });
   return { futureTasks, weeklySummaries, dailySummaries, completedTasks };
@@ -284,26 +299,27 @@ export async function logout() {
 // ==========================================
 
 export async function getMemos() {
-  const user = await getUser();
-  if (!user) return [];
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return [];
   return await prisma.memo.findMany({
-    where: { userId: user.id },
+    where: { userId: targetId },
     orderBy: { createdAt: "desc" },
     take: 100
   });
 }
 
 export async function getMemoCount() {
-  const user = await getUser();
-  if (!user) return 0;
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return 0;
   return await prisma.memo.count({
-    where: { userId: user.id }
+    where: { userId: targetId }
   });
 }
 
 export async function createMemo(data: { id?: string; content: string; tags: string[] }) {
   const user = await getUser();
   if (!user) return { ok: false as const, error: "请先登录" };
+  const targetId = user.id;
   const trimmed = data.content?.trim();
   if (!trimmed) return { ok: false as const, error: "内容不能为空" };
   if (trimmed.length > 1000) return { ok: false as const, error: "内容不能超过1000字" };
@@ -336,7 +352,7 @@ export async function createMemo(data: { id?: string; content: string; tags: str
       content: trimmed,
       tags: JSON.stringify(tagsArr),
       category,
-      userId: user.id
+      userId: targetId
     }
   });
   revalidatePath("/memos");
@@ -347,9 +363,10 @@ export async function createMemo(data: { id?: string; content: string; tags: str
 export async function deleteMemo(memoId: string) {
   const user = await getUser();
   if (!user) return { ok: false as const, error: "请先登录" };
+  const targetId = user.id;
 
   const res = await prisma.memo.deleteMany({
-    where: { id: memoId, userId: user.id }
+    where: { id: memoId, userId: targetId }
   });
   if (res.count === 0) {
     return { ok: false as const, error: "无权删除或记录不存在" };
@@ -360,11 +377,11 @@ export async function deleteMemo(memoId: string) {
 }
 
 export async function getHabitMatrixData(days = 84) {
-  const user = await getUser();
-  if (!user) return { habits: [], logs: [] };
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return { habits: [], logs: [] };
 
   const habits = await prisma.habit.findMany({
-    where: { userId: user.id },
+    where: { userId: targetId },
     orderBy: { createdAt: "asc" }
   });
 
@@ -374,7 +391,7 @@ export async function getHabitMatrixData(days = 84) {
 
   const logs = await prisma.habitLog.findMany({
     where: {
-      habit: { userId: user.id },
+      habit: { userId: targetId },
       date: { gte: startDate }
     },
     select: {
@@ -394,10 +411,10 @@ export async function getHabitMatrixData(days = 84) {
 // ==========================================
 
 export async function getTags() {
-  const user = await getUser();
-  if (!user) return [];
+  const targetId = await getEffectiveUserId();
+    if (!targetId) return [];
   let tags = await prisma.tag.findMany({
-    where: { userId: user.id },
+    where: { userId: targetId },
     orderBy: { createdAt: "asc" }
   });
 
@@ -410,13 +427,13 @@ export async function getTags() {
     ];
     for (const p of defaultPresets) {
       await prisma.tag.upsert({
-        where: { userId_name: { userId: user.id, name: p.name } },
+        where: { userId_name: { userId: targetId, name: p.name } },
         update: {},
-        create: { name: p.name, color: p.color, userId: user.id }
+        create: { name: p.name, color: p.color, userId: targetId }
       }).catch(() => {});
     }
     tags = await prisma.tag.findMany({
-      where: { userId: user.id },
+      where: { userId: targetId },
       orderBy: { createdAt: "asc" }
     });
   }
@@ -426,12 +443,13 @@ export async function getTags() {
 export async function createTag(name: string, color = "#A78BFA") {
   const user = await getUser();
   if (!user) return { ok: false as const, error: "请先登录" };
+  const targetId = user.id;
   const trimmed = name?.trim().replace(/^#+/, "");
   if (!trimmed) return { ok: false as const, error: "标签名不能为空" };
   if (trimmed.length > 20) return { ok: false as const, error: "标签名不能超过20个字符" };
 
   const existing = await prisma.tag.findUnique({
-    where: { userId_name: { userId: user.id, name: trimmed } }
+    where: { userId_name: { userId: targetId, name: trimmed } }
   });
   if (existing) {
     return { ok: true as const, tag: existing };
@@ -441,7 +459,7 @@ export async function createTag(name: string, color = "#A78BFA") {
     data: {
       name: trimmed,
       color: color || "#A78BFA",
-      userId: user.id
+      userId: targetId
     }
   });
 
@@ -453,6 +471,7 @@ export async function createTag(name: string, color = "#A78BFA") {
 export async function updateTag(tagId: string, name: string, color: string) {
   const user = await getUser();
   if (!user) return { ok: false as const, error: "请先登录" };
+  const targetId = user.id;
   const trimmed = name?.trim().replace(/^#+/, "");
   if (!trimmed) return { ok: false as const, error: "标签名不能为空" };
   if (trimmed.length > 20) return { ok: false as const, error: "标签名不能超过20个字符" };
@@ -465,7 +484,7 @@ export async function updateTag(tagId: string, name: string, color: string) {
   const oldName = existing.name;
   if (oldName !== trimmed) {
     const conflict = await prisma.tag.findUnique({
-      where: { userId_name: { userId: user.id, name: trimmed } }
+      where: { userId_name: { userId: targetId, name: trimmed } }
     });
     if (conflict) {
       return { ok: false as const, error: "已存在名为 #" + trimmed + " 的标签" };
@@ -479,7 +498,7 @@ export async function updateTag(tagId: string, name: string, color: string) {
 
   // 级联重命名：同步更新所有引用此标签的 Memo 记录
   if (oldName !== trimmed) {
-    const userMemos = await prisma.memo.findMany({ where: { userId: user.id } });
+    const userMemos = await prisma.memo.findMany({ where: { userId: targetId } });
     for (const m of userMemos) {
       try {
         const arr = JSON.parse(m.tags || "[]");
@@ -504,6 +523,7 @@ export async function updateTag(tagId: string, name: string, color: string) {
 export async function deleteTag(tagId: string) {
   const user = await getUser();
   if (!user) return { ok: false as const, error: "请先登录" };
+  const targetId = user.id;
 
   const existing = await prisma.tag.findUnique({ where: { id: tagId } });
   if (!existing || existing.userId !== user.id) {
@@ -514,7 +534,7 @@ export async function deleteTag(tagId: string) {
   await prisma.tag.delete({ where: { id: tagId } });
 
   // 级联清理：从用户的所有 Memo 中移除该标签
-  const userMemos = await prisma.memo.findMany({ where: { userId: user.id } });
+  const userMemos = await prisma.memo.findMany({ where: { userId: targetId } });
   for (const m of userMemos) {
     try {
       const arr = JSON.parse(m.tags || "[]");
@@ -537,14 +557,14 @@ export async function deleteTag(tagId: string) {
 
 
 export async function getJournalData() {
-  const user = await getUser();
-  if (!user) return { weeklySummaries: [], dailySummaries: [] };
+  const targetId = await getEffectiveUserId();
+    if (!targetId) return { weeklySummaries: [], dailySummaries: [] };
   const weeklySummaries = await prisma.weeklySummary.findMany({
-    where: { userId: user.id },
+    where: { userId: targetId },
     orderBy: [{ year: 'desc' }, { week: 'desc' }]
   });
   const dailySummaries = await prisma.dailySummary.findMany({
-    where: { userId: user.id },
+    where: { userId: targetId },
     orderBy: { date: 'desc' }
   });
   return { weeklySummaries, dailySummaries };
@@ -590,13 +610,30 @@ export async function deleteAccount() {
 
 
 export async function getAllTasks() {
-  const user = await getUser();
-  if (!user) return [];
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return [];
   const tasks = await prisma.task.findMany({
-    where: { userId: user.id },
+    where: { userId: targetId },
     orderBy: { dueDate: "asc" }
   });
   return tasks;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
