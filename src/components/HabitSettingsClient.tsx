@@ -136,7 +136,7 @@ export default function HabitSettingsClient({ initialHabits }: { initialHabits: 
                     </div>
                     <div>
                       <h3 className="font-bold text-slate-800 text-sm">{habit.title}</h3>
-                      <p className="text-xs text-slate-500">累计连胜 {habit.streak} 天</p>
+                      <p className="text-xs text-slate-500">累计打卡 {habit.streak} 天</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -202,3 +202,4 @@ export default function HabitSettingsClient({ initialHabits }: { initialHabits: 
     </div>
   );
 }
+

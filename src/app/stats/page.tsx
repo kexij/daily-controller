@@ -1,19 +1,27 @@
-import React from 'react';
-import { getStatsData } from '@/app/actions';
-import { Flame, Target, BookOpen } from 'lucide-react';
-import DailySummaryForm from '@/components/DailySummaryForm';
-import StatsSidebar from '@/components/StatsSidebar';
+import React from "react";
+import { getStatsData, getHabitMatrixData, } from "@/app/actions";
+import { Target, BookOpen } from "lucide-react";
+import DailySummaryForm from "@/components/DailySummaryForm";
+import StatsSidebar from "@/components/StatsSidebar";
+import HabitMatrixView from "@/components/HabitMatrixView";
+
+export const metadata = {
+  title: "执行复盘 | Daily Controller",
+  description: "数据见证你的每一次坚持"
+};
 
 export default async function StatsPage() {
-  const { todayTasks, todayCompleted, habits, summary } = await getStatsData();
+  const { todayTasks, todayCompleted, summary } = await getStatsData();
+      const { habits, logs } = await getHabitMatrixData(84);
+
   const completionRate = todayTasks === 0 ? 0 : Math.round((todayCompleted / todayTasks) * 100);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-28">
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-28 selection:bg-blue-100">
       <main className="max-w-md mx-auto p-6 pt-12 sm:pt-16">
         <StatsSidebar />
 
-        {/* Today's Rate */}
+        {/* 1. 今日完成率仪表盘 */}
         <section className="mb-8 bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex items-center justify-between">
           <div>
             <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">今日完成率</h2>
@@ -40,48 +48,20 @@ export default async function StatsPage() {
           </div>
         </section>
 
-        {/* Daily Summary */}
+
+
+        {/* 3. 今日心得沉思文本域 */}
         <section className="mb-8">
           <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center">
             <BookOpen className="w-5 h-5 text-blue-500 mr-2" />
             今日心得
           </h2>
-          <DailySummaryForm initialContent={summary?.content || ''} />
+          <DailySummaryForm initialContent={summary?.content || ""} />
         </section>
 
-        {/* Habits Streaks */}
-        <section>
-          <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center">
-            <Flame className="w-5 h-5 text-orange-500 mr-2" />
-            习惯连胜榜
-          </h2>
-          
-          {habits.length === 0 ? (
-            <div className="text-center py-10 bg-white border border-slate-100 border-dashed rounded-2xl">
-              <span className="text-slate-400 text-sm font-medium">还没建立任何习惯哦 🌱</span>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {habits.map(habit => (
-                <div key={habit.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center shadow-sm hover:shadow-md transition-shadow">
-                  <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-2xl mr-4">
-                    {habit.icon || '✨'}
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-bold text-slate-800">{habit.title}</h3>
-                    <p className="text-xs font-semibold text-slate-400 mt-1">当前坚持</p>
-                  </div>
-                  <div className="text-right flex items-baseline">
-                    <div className="text-3xl font-black text-orange-500 mr-1">{habit.streak}</div>
-                    <div className="text-xs font-bold text-slate-400 uppercase">天</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
+        {/* 4. 习惯打卡全景矩阵图与 GitHub 式深度贡献日历 */}
+        <HabitMatrixView habits={habits} logs={logs} />
       </main>
     </div>
-  )
+  );
 }

@@ -1,6 +1,6 @@
 "use client"
 import { useState } from 'react';
-import { MoreHorizontal, X, Settings, Database, ChevronRight, User } from 'lucide-react';
+import { MoreHorizontal, X, Settings, Database, ChevronRight, User, Lightbulb, CheckSquare, Book } from 'lucide-react';
 import Link from 'next/link';
 
 export default function StatsSidebar() {
@@ -28,12 +28,20 @@ export default function StatsSidebar() {
                 <div className="flex items-center gap-3"><User className="w-5 h-5"/> <span className="font-bold text-sm">个人账号</span></div>
                 <ChevronRight className="w-4 h-4 opacity-50 group-hover:opacity-100" />
               </Link>
+                            <Link href="/memos" className="flex items-center justify-between p-3 rounded-xl hover:bg-purple-50 text-slate-700 hover:text-purple-600 transition-colors group" onClick={() => setIsOpen(false)}>
+                <div className="flex items-center gap-3"><Lightbulb className="w-5 h-5"/> <span className="font-bold text-sm">灵感速记</span></div>
+                <ChevronRight className="w-4 h-4 opacity-50 group-hover:opacity-100" />
+              </Link>
               <Link href="/profile" className="flex items-center justify-between p-3 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-600 transition-colors group" onClick={() => setIsOpen(false)}>
                 <div className="flex items-center gap-3"><Settings className="w-5 h-5"/> <span className="font-bold text-sm">习惯设置</span></div>
                 <ChevronRight className="w-4 h-4 opacity-50 group-hover:opacity-100" />
               </Link>
-              <Link href="/data-center" className="flex items-center justify-between p-3 rounded-xl hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 transition-colors group" onClick={() => setIsOpen(false)}>
-                <div className="flex items-center gap-3"><Database className="w-5 h-5"/> <span className="font-bold text-sm">数据中心</span></div>
+              <Link href="/task-center" className="flex items-center justify-between p-3 rounded-xl hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 transition-colors group" onClick={() => setIsOpen(false)}>
+                <div className="flex items-center gap-3"><CheckSquare className="w-5 h-5"/> <span className="font-bold text-sm">任务中心</span></div>
+                <ChevronRight className="w-4 h-4 opacity-50 group-hover:opacity-100" />
+              </Link>
+              <Link href="/journal" className="flex items-center justify-between p-3 rounded-xl hover:bg-rose-50 text-slate-700 hover:text-rose-600 transition-colors group" onClick={() => setIsOpen(false)}>
+                <div className="flex items-center gap-3"><Book className="w-5 h-5"/> <span className="font-bold text-sm">日志栏</span></div>
                 <ChevronRight className="w-4 h-4 opacity-50 group-hover:opacity-100" />
               </Link>
             </div>

@@ -12,10 +12,13 @@ model User {
   username  String         @unique
   password  String
   name      String?
+  avatar    String?
   summaries DailySummary[]
   habits    Habit[]
   tasks     Task[]
   weeklySummaries WeeklySummary[]
+  memos           Memo[]
+  tags            Tag[]
 }
 
 model Task {
@@ -73,4 +76,31 @@ model WeeklySummary {
 }
 
 
+
+
+model Memo {
+  id        String   @id
+  content   String
+  tags      String   @default("[]")
+  category  String   @default("TRIVIA")
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+}
+
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String
+  color     String   @default("purple")
+  userId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, name])
+  @@index([userId])
+}
 

@@ -52,6 +52,17 @@ export default function DataCenterClient({ data }: { data: any }) {
     return Object.keys(map).sort().map(key => ({ date: key, tasks: map[key] }));
   }, [futureTasks]);
 
+  const historyTasksByDate = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    completedTasks.forEach((task: any) => {
+      const d = new Date(task.updatedAt || task.dueDate);
+      const dateKey = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+      if (!map[dateKey]) map[dateKey] = [];
+      map[dateKey].push(task);
+    });
+    return Object.keys(map).sort((a,b) => b.localeCompare(a)).map(key => ({ date: key, tasks: map[key] }));
+  }, [completedTasks]);
+
   return (
     <div>
       <div className="flex bg-slate-200/50 p-1 rounded-xl mb-6">
@@ -74,29 +85,16 @@ export default function DataCenterClient({ data }: { data: any }) {
       )}
 
       {tab === 'history' && (
-        <div className="space-y-4">
-          {sortedWeeks.length === 0 && <p className="text-center text-slate-400 py-10">暂无历史记录</p>}
-          {sortedWeeks.map(key => {
-            const weekData = historyMap[key];
-            const isExpanded = expandedWeek === key;
-            return (
-              <div key={key} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <button onClick={() => setExpandedWeek(isExpanded ? null : key)} className="w-full flex items-center justify-between p-5 bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                  <div className="text-left">
-                    <h3 className="font-bold text-slate-800 text-lg">{weekData.year}年 第{weekData.week}周</h3>
-                    <p className="text-xs font-semibold text-slate-500 mt-1">完成了 {weekData.tasks.length} 个任务，{weekData.daily.length} 篇日记</p>
-                  </div>
-                  {isExpanded ? <ChevronUp className="text-slate-400" /> : <ChevronDown className="text-slate-400" />}
-                </button>
-                
-                {isExpanded && (
-                  <div className="p-5 border-t border-slate-100 animate-in slide-in-from-top-2">
-                    <WeeklySummaryClient initialContent={weekData.summary?.content || ''} year={weekData.year} week={weekData.week} />
-                  </div>
-                )}
-              </div>
-            )
-          })}
+        <div className="space-y-6">
+          {historyTasksByDate.length === 0 && <p className="text-center text-slate-400 py-10">暂无历史轨迹</p>}
+          {historyTasksByDate.map((group) => (
+            <div key={group.date} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+              <h2 className="font-bold text-slate-800 mb-4 flex items-center">
+                <Calendar className="w-5 h-5 text-indigo-500 mr-2"/> {group.date}
+              </h2>
+              <TaskListClient tasks={group.tasks} />
+            </div>
+          ))}
         </div>
       )}
     </div>
