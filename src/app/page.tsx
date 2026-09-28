@@ -17,7 +17,7 @@ export default async function Dashboard() {
     }
   }
 
-  const { tasks, habits } = await getDashboardData(targetUserId);
+  const { tasks, habits } = await getDashboardData();
   
   let memos: any[] = [];
   if (targetUserId) {
