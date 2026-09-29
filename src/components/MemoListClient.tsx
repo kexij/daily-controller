@@ -6,6 +6,8 @@ import { createMemo, deleteMemo, createTag } from "@/app/actions";
 import { toast, confirmDialog } from "@/components/Feedback";
 import { useRouter } from "next/navigation";
 import TagManagerModal, { TagItem, getTagColorDef } from "./TagManagerModal";
+import MemoDetailModal from "./MemoDetailModal";
+import { parseMemoContent } from "@/lib/task-utils";
 
 interface MemoItem {
   id: string;
@@ -38,13 +40,15 @@ export default function MemoListClient({
   }, [initialMemos]);
 
   // 新建灵感状态
-  const [newContent, setNewContent] = useState("");
+  const [newTitle, setNewTitle] = useState("");
+  const [newDetails, setNewDetails] = useState("");
   const [selectedTagsForCreate, setSelectedTagsForCreate] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 标签管理弹窗状态
   const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectedMemo, setSelectedMemo] = useState<MemoItem | null>(null);
 
   const getFreshColor = (c?: string) => {
     if (!c) return '#CBD5E1';
@@ -167,19 +171,24 @@ export default function MemoListClient({
 
   // Handlers
   async function handleCreateMemo() {
-    if (!newContent.trim()) {
-      toast.error("内容不能为空");
+    const cleanTitle = newTitle.trim();
+    if (!cleanTitle) {
+      toast.error("灵感主题不能为空");
       return;
     }
+    const cleanDetails = newDetails.trim();
+    const fullContent = cleanDetails ? `${cleanTitle}\n\n${cleanDetails}` : cleanTitle;
+
     setIsSubmitting(true);
     try {
-      const res = await createMemo({ content: newContent, tags: selectedTagsForCreate });
+      const res = await createMemo({ content: fullContent, tags: selectedTagsForCreate });
       if (res && res.ok === false) {
         toast.error(res.error);
         return;
       }
       toast.success("记录成功");
-      setNewContent("");
+      setNewTitle("");
+      setNewDetails("");
       router.refresh();
     } catch (err) {
       toast.error("记录失败");
@@ -237,18 +246,25 @@ export default function MemoListClient({
       </div>
 
       {/* 记录卡片（新建灵感区） */}
-      <div className="mx-5 bg-white rounded-[24px] p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col gap-4 relative z-10">
+      <div className="mx-5 bg-white rounded-[24px] p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col gap-3 relative z-10">
+        <input
+          type="text"
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+          placeholder="记下灵感主题..."
+          className="w-full bg-[#F8FAFC] border border-slate-100 rounded-[14px] px-4 py-3 text-[14px] font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-purple-300 focus:ring-4 focus:ring-purple-50 transition-all"
+        />
         <textarea 
-          value={newContent}
-          onChange={(e) => setNewContent(e.target.value)}
+          value={newDetails}
+          onChange={(e) => setNewDetails(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
               handleCreateMemo();
             }
           }}
-          placeholder="随时记下灵感碎片、待办线索或生活杂记... (Ctrl+Enter 发送)" 
-          className="w-full bg-[#F8FAFC] border border-slate-100 rounded-[16px] px-4 py-3.5 text-[14px] font-medium text-slate-700 h-24 resize-none focus:outline-none focus:border-purple-200 focus:ring-4 focus:ring-purple-50 transition-all"
+          placeholder="补充详细备注... (可选，Ctrl+Enter 发送)" 
+          className="w-full bg-[#F8FAFC] border border-slate-100 rounded-[14px] px-4 py-3 text-[13px] font-medium text-slate-700 h-20 resize-none focus:outline-none focus:border-purple-300 focus:ring-4 focus:ring-purple-50 transition-all placeholder:text-slate-400"
         ></textarea>
         
         {/* 标签选择区 */}
@@ -348,12 +364,17 @@ export default function MemoListClient({
           filteredMemos.map(memo => {
             let tagsArray: string[] = [];
             try { tagsArray = JSON.parse(memo.tags || "[]"); } catch {}
+            const { title } = parseMemoContent(memo.content);
 
             return (
-              <div key={memo.id} className="bg-white p-5 rounded-[20px] shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-slate-100 flex flex-col gap-3">
-                <p className="text-[14px] font-medium text-slate-800 leading-relaxed whitespace-pre-wrap break-words">
-                  {memo.content}
-                </p>
+              <div 
+                key={memo.id} 
+                onClick={() => setSelectedMemo(memo)}
+                className="bg-white p-5 rounded-[20px] shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-slate-100 hover:border-purple-200 transition-all cursor-pointer flex flex-col gap-3 group"
+              >
+                <h3 className="text-[15px] font-bold text-slate-800 leading-snug line-clamp-2 group-hover:text-purple-700 transition-colors">
+                  {title}
+                </h3>
                 <div className="flex items-center justify-between mt-1 pt-3 border-t border-slate-50">
                   <div className="flex items-center gap-2 flex-wrap">
                     {tagsArray.map(tName => {
@@ -371,10 +392,26 @@ export default function MemoListClient({
                   </div>
                   
                   <div className="flex items-center gap-1">
-                    <button onClick={() => handleCopy(memo.id, memo.content)} className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer">
+                    <button 
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopy(memo.id, memo.content);
+                      }} 
+                      className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
+                      title="复制完整内容"
+                    >
                       {copiedId === memo.id ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
-                    <button onClick={() => handleDeleteMemo(memo.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer">
+                    <button 
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteMemo(memo.id);
+                      }} 
+                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                      title="删除灵感"
+                    >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -391,6 +428,23 @@ export default function MemoListClient({
           tags={tags}
           onClose={() => setIsTagManagerOpen(false)}
           onTagsChange={handleTagsChange}
+        />
+      )}
+
+      {/* 灵感详情与编辑弹窗 */}
+      {selectedMemo && (
+        <MemoDetailModal
+          memo={selectedMemo}
+          availableTags={tags}
+          onClose={() => setSelectedMemo(null)}
+          onSaveSuccess={(updated) => {
+            setMemos(prev => prev.map(m => m.id === updated.id ? { ...m, ...updated } : m));
+            router.refresh();
+          }}
+          onDeleteSuccess={(deletedId) => {
+            setMemos(prev => prev.filter(m => m.id !== deletedId));
+            router.refresh();
+          }}
         />
       )}
       

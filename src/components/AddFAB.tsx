@@ -36,9 +36,15 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
 
   const router = useRouter();
 
-  // 当打开弹窗时，实时拉取最新的持久化标签库
+  // 当打开弹窗时，实时拉取最新的持久化标签库并重置任务默认选项
   useEffect(() => {
     if (isOpen) {
+      const now = new Date();
+      const currentTodayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      setTaskDate(currentTodayStr);
+      setTaskTime('');
+      setTaskSpan('当天');
+
       getTags()
         .then(dbTags => {
           if (dbTags && dbTags.length > 0) {
@@ -84,7 +90,12 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
       const span = (formData.get('span') as string) || '当天';
       
       let timeStr = taskTime || "23:59";
-      const dueDate = new Date(`${taskDate}T${timeStr}:00`);
+      const datePart = taskDate || todayStr;
+      let dueDate = new Date(`${datePart}T${timeStr}:00`);
+      if (isNaN(dueDate.getTime())) {
+        dueDate = new Date();
+        dueDate.setHours(23, 59, 0, 0);
+      }
       
       const res = await createTask({ title, description, dueDate, span });
       if (res && res.ok === false) {
@@ -93,6 +104,9 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
       }
       toast.success('任务创建成功');
       setIsOpen(false);
+      setTaskDate(todayStr);
+      setTaskTime('');
+      setTaskSpan('当天');
       router.refresh();
     } catch (error) {
       console.error(error);
@@ -104,9 +118,10 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
 
   async function handleIdeaSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const form = e.currentTarget;
     setIsSubmitting(true);
     try {
-      const formData = new FormData(e.currentTarget);
+      const formData = new FormData(form);
       const mainContent = formData.get('mainContent') as string;
       const details = formData.get('details') as string;
       
@@ -119,7 +134,7 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
       }
       toast.success('灵感保存成功');
       setIsOpen(false);
-      e.currentTarget.reset();
+      form?.reset?.();
       router.refresh();
     } catch (error) {
       console.error(error);
@@ -211,7 +226,7 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
                   <div className="relative">
                     <button type="button" onClick={() => setShowDatePicker(!showDatePicker)} className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white border border-slate-200/80 text-slate-700 text-[12px] font-semibold transition-all shadow-sm">
                       <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                      {taskDate === todayStr ? '今天' : taskDate}
+                      {taskDate === todayStr || !taskDate ? '今天' : taskDate}
                     </button>
                       {showDatePicker && <CustomDatePicker value={taskDate} onChange={setTaskDate} onClose={() => setShowDatePicker(false)} />}
                   </div>
@@ -220,7 +235,7 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
                   <div className="relative">
                     <button type="button" onClick={() => setShowTimePicker(!showTimePicker)} className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border transition-all text-[12px] font-medium ${taskTime ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'bg-white border-slate-200/80 text-slate-500 shadow-sm hover:border-slate-300'}`}>
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                      {taskTime || '截止时间'}
+                      {taskTime || '全天'}
                     </button>
                       {showTimePicker && <CustomTimePicker value={taskTime} onChange={setTaskTime} onClose={() => setShowTimePicker(false)} />}
                   </div>
@@ -269,10 +284,7 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
             {tab === 'idea' && (
               <form onSubmit={handleIdeaSubmit} className="absolute inset-0 px-6 pb-6 flex flex-col gap-4 animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="relative">
-                  <input name="mainContent" autoFocus type="text" placeholder="记下一个闪念、好点子或取件码小记..." className="w-full bg-white border border-slate-100/80 rounded-full pl-5 pr-14 py-3.5 text-[14px] font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-orange-200 focus:ring-4 focus:ring-orange-50 shadow-[0_4px_16px_-4px_rgba(0,0,0,0.04),0_0_0_1px_rgba(255,255,255,0.5)_inset] transition-all" required />
-                  <button type="submit" disabled={isSubmitting} className="absolute right-1.5 top-1.5 bottom-1.5 aspect-square bg-[#FDD99B] hover:bg-[#FBCB7B] rounded-full flex items-center justify-center text-white transition-colors cursor-pointer disabled:opacity-50">
-                    <svg className="w-4 h-4 -ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
-                  </button>
+                  <input name="mainContent" autoFocus type="text" placeholder="记下一个闪念、好点子或取件码小记..." className="w-full bg-white border border-slate-100/80 rounded-full px-5 py-3.5 text-[14px] font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-orange-200 focus:ring-4 focus:ring-orange-50 shadow-[0_4px_16px_-4px_rgba(0,0,0,0.04),0_0_0_1px_rgba(255,255,255,0.5)_inset] transition-all" required />
                 </div>
                 
                 <div className="flex items-start gap-3 mt-1">

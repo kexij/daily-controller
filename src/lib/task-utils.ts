@@ -112,3 +112,27 @@ export function getTaskSpanInfo(
     badgeText,
   };
 }
+
+/**
+ * 解析灵感内容的标题与详细备注
+ * 规则：首行/首段为标题，后续内容为详细备注
+ */
+export function parseMemoContent(raw?: string | null): { title: string; details: string } {
+  if (!raw) return { title: '', details: '' };
+  const normalized = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  if (normalized.includes('\n\n')) {
+    const idx = normalized.indexOf('\n\n');
+    return {
+      title: normalized.slice(0, idx).trim(),
+      details: normalized.slice(idx + 2).trim(),
+    };
+  }
+  if (normalized.includes('\n')) {
+    const idx = normalized.indexOf('\n');
+    return {
+      title: normalized.slice(0, idx).trim(),
+      details: normalized.slice(idx + 1).trim(),
+    };
+  }
+  return { title: normalized, details: '' };
+}

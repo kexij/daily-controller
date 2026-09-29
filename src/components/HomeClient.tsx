@@ -5,15 +5,33 @@ import { useRouter } from 'next/navigation';
 import { toggleTask, updateTaskDetails, deleteTask, toggleHabitCheckIn } from '@/app/actions';
 import { toast, confirmDialog } from '@/components/Feedback';
 import AddFAB from '@/components/AddFAB';
-import { getTaskSpanInfo, cleanDescription, parseSpanText } from '@/lib/task-utils';
+import MemoDetailModal from '@/components/MemoDetailModal';
+import { getTaskSpanInfo, cleanDescription, parseSpanText, parseMemoContent } from '@/lib/task-utils';
 
-export default function HomeClient({ user, tasks, habits, memos, overdueCount = 0, isDemo }: { user: any, tasks: any[], habits: any[], memos: any[], overdueCount?: number, isDemo?: boolean }) {
+export default function HomeClient({ 
+  user, 
+  tasks, 
+  habits, 
+  memos, 
+  tags = [],
+  overdueCount = 0, 
+  isDemo 
+}: { 
+  user: any, 
+  tasks: any[], 
+  habits: any[], 
+  memos: any[], 
+  tags?: any[],
+  overdueCount?: number, 
+  isDemo?: boolean 
+}) {
   const router = useRouter();
   const [tab, setTab] = useState<'task' | 'idea'>('task');
   const [isAnimating, setIsAnimating] = useState(false);
   
   // Task Edit Modal State
   const [selectedTask, setSelectedTask] = useState<any>(null);
+  const [selectedMemo, setSelectedMemo] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [mounted, setMounted] = useState(false);
@@ -177,11 +195,17 @@ export default function HomeClient({ user, tasks, habits, memos, overdueCount = 
               if (task.isCompleted) {
                 return (
                   <div key={task.id} className="bg-white/60 border border-slate-100 rounded-[20px] p-4 flex items-start gap-3 opacity-60 transition-colors hover:opacity-80">
-                    <form action={async () => await toggleTask(task.id, false)} className="mt-0.5 shrink-0">
-                      <button type="submit" className="w-5 h-5 rounded-full flex items-center justify-center bg-emerald-100 text-emerald-500 hover:bg-emerald-200 transition-colors cursor-pointer">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"></path></svg>
-                      </button>
-                    </form>
+                    <button 
+                      type="button" 
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        await toggleTask(task.id, false);
+                        router.refresh();
+                      }}
+                      className="mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center bg-emerald-100 text-emerald-500 hover:bg-emerald-200 transition-colors cursor-pointer"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"></path></svg>
+                    </button>
                     <div className="flex flex-col flex-1 cursor-pointer" onClick={() => setSelectedTask(task)}>
                       <span className="text-base font-bold text-slate-400 line-through decoration-slate-300">{task.title}</span>
                       <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400 mt-1 flex-wrap">
@@ -204,9 +228,15 @@ export default function HomeClient({ user, tasks, habits, memos, overdueCount = 
               if (spanInfo.isOverdue) {
                 return (
                   <div key={task.id} className="bg-[#FFF8F8] border border-red-100 rounded-[20px] p-4 flex items-start gap-3 shadow-[0_4px_20px_rgba(239,68,68,0.03)] hover:border-red-200 transition-colors cursor-pointer">
-                    <form action={async () => await toggleTask(task.id, true)} className="mt-0.5 shrink-0">
-                      <button type="submit" className="w-5 h-5 rounded-full border-2 border-red-300 flex items-center justify-center bg-white hover:bg-red-50 transition-colors cursor-pointer"></button>
-                    </form>
+                    <button 
+                      type="button" 
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        await toggleTask(task.id, true);
+                        router.refresh();
+                      }}
+                      className="mt-0.5 shrink-0 w-5 h-5 rounded-full border-2 border-red-300 flex items-center justify-center bg-white hover:bg-red-50 transition-colors cursor-pointer"
+                    ></button>
                     <div className="flex flex-col flex-1 cursor-pointer" onClick={() => setSelectedTask(task)}>
                       <span className="text-base font-bold text-slate-800">{task.title}</span>
                       <div className="flex items-center gap-1 text-xs font-bold text-red-500 mt-1.5 bg-red-50 w-fit px-1.5 py-0.5 rounded-md">
@@ -225,9 +255,15 @@ export default function HomeClient({ user, tasks, habits, memos, overdueCount = 
               if (spanInfo.isMultiDay) {
                 return (
                   <div key={task.id} className="bg-gradient-to-r from-white via-indigo-50/20 to-white border border-indigo-100/90 rounded-[20px] p-4 flex items-start gap-3 shadow-[0_4px_20px_rgba(99,102,241,0.03)] hover:border-indigo-200 transition-all cursor-pointer">
-                    <form action={async () => await toggleTask(task.id, true)} className="mt-0.5 shrink-0">
-                      <button type="submit" className="w-5 h-5 rounded-full border-2 border-indigo-200 flex items-center justify-center bg-indigo-50/50 hover:bg-indigo-100 hover:border-indigo-400 transition-colors cursor-pointer"></button>
-                    </form>
+                    <button 
+                      type="button" 
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        await toggleTask(task.id, true);
+                        router.refresh();
+                      }}
+                      className="mt-0.5 shrink-0 w-5 h-5 rounded-full border-2 border-indigo-200 flex items-center justify-center bg-indigo-50/50 hover:bg-indigo-100 hover:border-indigo-400 transition-colors cursor-pointer"
+                    ></button>
                     <div className="flex flex-col flex-1 cursor-pointer" onClick={() => setSelectedTask(task)}>
                       <span className="text-base font-bold text-slate-800">{task.title}</span>
                       <div className="flex items-center gap-2 text-xs font-semibold mt-1.5 flex-wrap">
@@ -248,9 +284,15 @@ export default function HomeClient({ user, tasks, habits, memos, overdueCount = 
               // 4. 当天普通任务
               return (
                 <div key={task.id} className="bg-white border border-slate-100/80 rounded-[20px] p-4 flex items-start gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:border-blue-100 transition-colors cursor-pointer">
-                  <form action={async () => await toggleTask(task.id, true)} className="mt-0.5 shrink-0">
-                    <button type="submit" className="w-5 h-5 rounded-full border-2 border-slate-200 flex items-center justify-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-colors cursor-pointer"></button>
-                  </form>
+                  <button 
+                    type="button" 
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      await toggleTask(task.id, true);
+                      router.refresh();
+                    }}
+                    className="mt-0.5 shrink-0 w-5 h-5 rounded-full border-2 border-slate-200 flex items-center justify-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-colors cursor-pointer"
+                  ></button>
                   <div className="flex flex-col flex-1 cursor-pointer" onClick={() => setSelectedTask(task)}>
                     <span className="text-base font-bold text-slate-800">{task.title}</span>
                     <div className="flex items-center gap-1 text-xs font-bold text-blue-500 mt-1.5">
@@ -279,11 +321,16 @@ export default function HomeClient({ user, tasks, habits, memos, overdueCount = 
               // Alternate styles for visual variety as per mockup
               const isFirst = index % 3 === 0;
               const memoDate = new Date(memo.createdAt);
+              const { title } = parseMemoContent(memo.content);
               
               return (
-                <div key={memo.id} onClick={() => router.push('/memos')} className={`${isFirst ? 'bg-gradient-to-br from-white to-purple-50/30 border-purple-100/50 shadow-[0_4px_20px_rgba(147,51,234,0.03)] hover:border-purple-200' : 'bg-white border-slate-100/80 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:border-blue-100'} border rounded-[20px] p-4 flex flex-col gap-2 cursor-pointer transition-colors`}>
-                  <p className="text-base font-medium text-slate-700 leading-relaxed line-clamp-3">{memo.content}</p>
-                  <div className="flex items-center gap-2 mt-1.5 overflow-hidden">
+                <div 
+                  key={memo.id} 
+                  onClick={() => setSelectedMemo(memo)} 
+                  className={`${isFirst ? 'bg-gradient-to-br from-white to-purple-50/30 border-purple-100/50 shadow-[0_4px_20px_rgba(147,51,234,0.03)] hover:border-purple-200' : 'bg-white border-slate-100/80 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:border-blue-100'} border rounded-[20px] p-4 flex flex-col gap-2 cursor-pointer transition-all hover:scale-[1.01]`}
+                >
+                  <p className="text-base font-bold text-slate-800 leading-snug line-clamp-2">{title}</p>
+                  <div className="flex items-center gap-2 mt-1 overflow-hidden">
                     {parsedTags.map((tag: string, tIdx: number) => (
                       <span key={tIdx} className={`text-xs font-bold px-2 py-0.5 rounded-md flex items-center gap-1 whitespace-nowrap ${isFirst ? 'text-purple-600 bg-purple-100/80' : tIdx % 2 === 0 ? 'text-orange-600 bg-orange-100/80' : 'text-blue-600 bg-blue-100/80'}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${isFirst ? 'bg-purple-500' : tIdx % 2 === 0 ? 'bg-orange-500' : 'bg-blue-500'}`}></span> {tag}
@@ -307,21 +354,27 @@ export default function HomeClient({ user, tasks, habits, memos, overdueCount = 
           {habits.map(habit => {
             const isCheckedToday = habit.logs && habit.logs.length > 0;
             return (
-              <form key={habit.id} action={async () => await toggleHabitCheckIn(habit.id)}>
-                <button type="submit" className={`w-full aspect-square rounded-[24px] flex flex-col items-center justify-center p-3 transition-all active:scale-95 cursor-pointer ${isCheckedToday ? 'bg-emerald-50 border border-emerald-100 shadow-sm' : 'bg-white border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:border-slate-200'}`}>
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl shadow-sm transition-all mb-2 ${isCheckedToday ? 'bg-white' : 'bg-slate-50'}`}>
-                    {habit.icon || '✨'}
-                  </div>
-                  <span className={`text-sm font-bold mb-1 line-clamp-1 ${isCheckedToday ? 'text-emerald-800' : 'text-slate-700'}`}>
-                    {habit.title}
-                  </span>
-                  {isCheckedToday ? (
-                     <span className="text-xs text-emerald-600 font-bold bg-emerald-100 px-2 py-0.5 rounded-md">🔥 {habit.streak}天</span>
-                  ) : (
-                     <span className="text-xs text-slate-400 font-semibold bg-slate-100 px-2 py-0.5 rounded-md whitespace-nowrap">待打卡</span>
-                  )}
-                </button>
-              </form>
+              <button 
+                key={habit.id}
+                type="button" 
+                onClick={async () => {
+                  await toggleHabitCheckIn(habit.id);
+                  router.refresh();
+                }}
+                className={`w-full aspect-square rounded-[24px] flex flex-col items-center justify-center p-3 transition-all active:scale-95 cursor-pointer ${isCheckedToday ? 'bg-emerald-50 border border-emerald-100 shadow-sm' : 'bg-white border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:border-slate-200'}`}
+              >
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl shadow-sm transition-all mb-2 ${isCheckedToday ? 'bg-white' : 'bg-slate-50'}`}>
+                  {habit.icon || '✨'}
+                </div>
+                <span className={`text-sm font-bold mb-1 line-clamp-1 ${isCheckedToday ? 'text-emerald-800' : 'text-slate-700'}`}>
+                  {habit.title}
+                </span>
+                {isCheckedToday ? (
+                   <span className="text-xs text-emerald-600 font-bold bg-emerald-100 px-2 py-0.5 rounded-md">🔥 {habit.streak}天</span>
+                ) : (
+                   <span className="text-xs text-slate-400 font-semibold bg-slate-100 px-2 py-0.5 rounded-md whitespace-nowrap">待打卡</span>
+                )}
+              </button>
             );
           })}
         </div>
@@ -398,6 +451,17 @@ export default function HomeClient({ user, tasks, habits, memos, overdueCount = 
             </form>
           </div>
         </div>
+      )}
+
+      {/* Memo Edit Modal */}
+      {selectedMemo && (
+        <MemoDetailModal
+          memo={selectedMemo}
+          availableTags={tags}
+          onClose={() => setSelectedMemo(null)}
+          onSaveSuccess={() => router.refresh()}
+          onDeleteSuccess={() => router.refresh()}
+        />
       )}
 
       </div>

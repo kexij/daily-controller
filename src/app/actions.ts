@@ -210,15 +210,31 @@ export async function updateTaskDetails(taskId: string, title: string, descripti
   revalidatePath('/stats');
 }
 
-export async function createTask(data: { title: string; description: string; dueDate: Date; span?: string }) {
+export async function createTask(data: { title: string; description: string; dueDate?: Date | string | null; span?: string }) {
   const targetId = await getEffectiveUserId();
   if (!targetId) return { ok: false as const, error: '无法获取用户标识' };
+
+  // 保证 dueDate 绝对有效；没指定或无效时，默认当天全天 (23:59:00)
+  let finalDueDate: Date;
+  if (data.dueDate) {
+    const parsed = new Date(data.dueDate);
+    if (!isNaN(parsed.getTime())) {
+      finalDueDate = parsed;
+    } else {
+      finalDueDate = new Date();
+      finalDueDate.setHours(23, 59, 0, 0);
+    }
+  } else {
+    finalDueDate = new Date();
+    finalDueDate.setHours(23, 59, 0, 0);
+  }
+
   try {
     await prisma.task.create({ 
       data: { 
         title: data.title,
         description: data.description || '',
-        dueDate: data.dueDate,
+        dueDate: finalDueDate,
         span: data.span || '当天',
         userId: targetId 
       } 
@@ -229,7 +245,7 @@ export async function createTask(data: { title: string; description: string; due
         data: { 
           title: data.title,
           description: data.description || '',
-          dueDate: data.dueDate,
+          dueDate: finalDueDate,
           userId: targetId 
         } 
       });
@@ -463,6 +479,7 @@ export async function createMemo(data: { id?: string; content: string; tags: str
         category
       }
     });
+    revalidatePath("/");
     revalidatePath("/memos");
     revalidatePath("/stats");
     return { ok: true as const, memo: updated };
@@ -477,6 +494,7 @@ export async function createMemo(data: { id?: string; content: string; tags: str
       userId: targetId
     }
   });
+  revalidatePath("/");
   revalidatePath("/memos");
   revalidatePath("/stats");
   return { ok: true as const, memo: created };
@@ -492,6 +510,7 @@ export async function deleteMemo(memoId: string) {
   if (res.count === 0) {
     return { ok: false as const, error: "无权删除或记录不存在" };
   }
+  revalidatePath("/");
   revalidatePath("/memos");
   revalidatePath("/stats");
   return { ok: true as const };

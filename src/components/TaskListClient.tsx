@@ -1,12 +1,14 @@
 'use client'
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { CheckCircle2, Circle, Clock, X, AlertCircle } from 'lucide-react';
 import { toggleTask, updateTaskDetails, deleteTask } from '@/app/actions';
 import { toast, confirmDialog } from '@/components/Feedback';
 import { getTaskSpanInfo, cleanDescription, parseSpanText } from '@/lib/task-utils';
 
 export default function TaskListClient({ tasks }: { tasks: any[] }) {
+  const router = useRouter();
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -70,19 +72,24 @@ export default function TaskListClient({ tasks }: { tasks: any[] }) {
           return (
             <div key={task.id} className={`flex items-center p-4 bg-white rounded-2xl shadow-sm border transition-all ${task.isCompleted ? 'opacity-60 border-slate-100' : isOverdue ? 'border-red-100 bg-red-50/30' : 'border-slate-100 hover:border-blue-100 hover:shadow-md'}`}>
               
-              <form action={async () => {
-                await toggleTask(task.id, !task.isCompleted);
-              }}>
-                <button type="submit" className="mr-4 flex-shrink-0 cursor-pointer rounded-full focus:outline-none hover:scale-110 transition-transform" title={task.isCompleted ? "标为未完成" : "标为完成"}>
-                  {task.isCompleted ? (
-                    <CheckCircle2 className="w-6 h-6 text-emerald-400" />
-                  ) : isOverdue ? (
-                    <Circle className="w-6 h-6 text-red-200 hover:text-red-400 transition-colors" />
-                  ) : (
-                    <Circle className="w-6 h-6 text-slate-200 hover:text-blue-400 transition-colors" />
-                  )}
-                </button>
-              </form>
+              <button 
+                type="button" 
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  await toggleTask(task.id, !task.isCompleted);
+                  router.refresh();
+                }}
+                className="mr-4 flex-shrink-0 cursor-pointer rounded-full focus:outline-none hover:scale-110 transition-transform" 
+                title={task.isCompleted ? "标为未完成" : "标为完成"}
+              >
+                {task.isCompleted ? (
+                  <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                ) : isOverdue ? (
+                  <Circle className="w-6 h-6 text-red-200 hover:text-red-400 transition-colors" />
+                ) : (
+                  <Circle className="w-6 h-6 text-slate-200 hover:text-blue-400 transition-colors" />
+                )}
+              </button>
               
               <button 
                 type="button" 
