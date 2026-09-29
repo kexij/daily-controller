@@ -3,41 +3,107 @@
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 
-import { getSession, createSession, clearSession } from '@/lib/session';
+import { getSession, createSession, clearSession, getUser } from '@/lib/session';
+import { getEffectiveSession, getGuestId, resetGuestToInitialDemo } from '@/lib/guest-session';
+import { getTaskSpanInfo } from '@/lib/task-utils';
 import bcrypt from 'bcryptjs';
 
-export async function getUser() {
-  const session = await getSession();
-  if (!session?.userId) return null;
-  return await prisma.user.findUnique({ where: { id: session.userId } });
+export { getUser };
+
+export async function getEffectiveUserId(): Promise<string> {
+  const { userId } = await getEffectiveSession();
+  return userId;
 }
 
-async function getEffectiveUserId() {
-  const user = await getUser();
-  if (user) return user.id;
-  const kexi = await prisma.user.findUnique({ where: { username: 'kexi' } });
-  return kexi?.id;
+export async function resetDemoSandbox() {
+  const guestId = await getGuestId();
+  if (guestId) {
+    await resetGuestToInitialDemo(guestId);
+    revalidatePath('/');
+    revalidatePath('/stats');
+    revalidatePath('/memos');
+    revalidatePath('/task-center');
+    revalidatePath('/data-center');
+    revalidatePath('/journal');
+    revalidatePath('/overdue');
+    return { ok: true as const };
+  }
+  return { ok: false as const, error: '未处于访客演示状态' };
 }
 
 export async function getDashboardData() {
   const targetId = await getEffectiveUserId();
-  if (!targetId) return { tasks: [], habits: [] };
+  if (!targetId) return { tasks: [], habits: [], overdueCount: 0 };
 
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
-  const todayEnd = new Date()
-  todayEnd.setHours(23, 59, 59, 999)
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
 
-  const tasks = await prisma.task.findMany({
+  // 1. 今天应做的普通任务（截止日在今天之内）
+  const todayTasks = await prisma.task.findMany({
     where: { 
       userId: targetId,
-      OR: [
-        { dueDate: { gte: todayStart, lte: todayEnd } },
-        { dueDate: { lt: todayStart }, isCompleted: false }
-      ]
+      dueDate: { gte: todayStart, lte: todayEnd }
     },
     orderBy: { dueDate: 'asc' }
-  })
+  });
+
+  // 2. 过去创建且未完成的任务
+  const pastIncompleteTasks = await prisma.task.findMany({
+    where: {
+      userId: targetId,
+      dueDate: { lt: todayStart },
+      isCompleted: false
+    },
+    orderBy: { dueDate: 'asc' }
+  });
+
+  // 3. 过去创建但在今天完成的跨度任务（保留在今日已完成列表中）
+  const pastCompletedTodayTasks = await prisma.task.findMany({
+    where: {
+      userId: targetId,
+      dueDate: { lt: todayStart },
+      isCompleted: true,
+      updatedAt: { gte: todayStart, lte: todayEnd }
+    },
+    orderBy: { dueDate: 'asc' }
+  });
+
+  const activeMultiDayTasks: typeof todayTasks = [];
+  let overdueCount = 0;
+
+  for (const task of pastIncompleteTasks) {
+    const spanInfo = getTaskSpanInfo(task, todayStart);
+    if (spanInfo.isWithinSpan) {
+      // 仍然处于跨度周期内：自动加入今日任务，不属于逾期！
+      activeMultiDayTasks.push(task);
+    } else if (spanInfo.isOverdue) {
+      // 已经超过跨度总天数且未完成：计入真正逾期
+      overdueCount++;
+    }
+  }
+
+  for (const task of pastCompletedTodayTasks) {
+    const spanInfo = getTaskSpanInfo(task, todayStart);
+    if (spanInfo.isMultiDay) {
+      activeMultiDayTasks.push(task);
+    }
+  }
+
+  // 合并今日任务与跨度期内的短期任务（去重）
+  const taskMap = new Map<string, typeof todayTasks[0]>();
+  for (const task of [...activeMultiDayTasks, ...todayTasks]) {
+    taskMap.set(task.id, task);
+  }
+  const tasks = Array.from(taskMap.values());
+  // 排序：未完成的在前（按 dueDate 升序），已完成的在后
+  tasks.sort((a, b) => {
+    if (a.isCompleted !== b.isCompleted) {
+      return a.isCompleted ? 1 : -1;
+    }
+    return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+  });
 
   const habits = await prisma.habit.findMany({
     where: { userId: targetId },
@@ -46,31 +112,25 @@ export async function getDashboardData() {
         where: { date: { gte: todayStart, lte: todayEnd } }
       }
     }
-  })
+  });
 
-  return { tasks, habits }
+  return { tasks, habits, overdueCount };
 }
 
 export async function getStatsData() {
   const targetId = await getEffectiveUserId();
-  if (!targetId) return { todayTasks: 0, todayCompleted: 0, habits: [], summary: null }
+  if (!targetId) return { todayTasks: 0, todayCompleted: 0, habits: [], summary: null };
 
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
-  const todayEnd = new Date()
-  todayEnd.setHours(23, 59, 59, 999)
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
 
-  const todayTasksList = await prisma.task.findMany({
-    where: { 
-      userId: targetId,
-      dueDate: { gte: todayStart, lte: todayEnd }
-    }
-  })
+  // 获取今日看板的任务集合以保证统计一致性
+  const { tasks } = await getDashboardData();
 
   const habits = await prisma.habit.findMany({
     where: { userId: targetId },
     orderBy: { streak: 'desc' }
-  })
+  });
 
   const summary = await prisma.dailySummary.findUnique({
     where: {
@@ -79,20 +139,19 @@ export async function getStatsData() {
         date: todayStart
       }
     }
-  })
+  });
 
   return {
-    todayTasks: todayTasksList.length,
-    todayCompleted: todayTasksList.filter(t => t.isCompleted).length,
+    todayTasks: tasks.length,
+    todayCompleted: tasks.filter(t => t.isCompleted).length,
     habits,
     summary
-  }
+  };
 }
 
 export async function saveDailySummary(content: string) {
-  const user = await getUser()
-  if (!user) return
-  const targetId = user.id;
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return;
 
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
@@ -114,75 +173,134 @@ export async function saveDailySummary(content: string) {
   revalidatePath('/stats')
 }
 
-// ... other existing functions unchanged ...
 export async function toggleTask(taskId: string, isCompleted: boolean) {
-  const user = await getUser(); if (!user) return;
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return;
 
-  await prisma.task.update({ where: { id: taskId }, data: { isCompleted } })
+  await prisma.task.updateMany({ where: { id: taskId, userId: targetId }, data: { isCompleted } })
   revalidatePath('/')
   revalidatePath('/stats')
 }
-export async function updateTaskDetails(taskId: string, title: string, description: string) {
-  const user = await getUser(); if (!user) return;
 
-  await prisma.task.update({ where: { id: taskId }, data: { title, description } })
-  revalidatePath('/')
+export async function updateTaskDetails(taskId: string, title: string, description: string, span?: string) {
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return;
+
+  try {
+    await prisma.task.updateMany({ 
+      where: { id: taskId, userId: targetId }, 
+      data: { 
+        title, 
+        description,
+        ...(span !== undefined ? { span } : {})
+      } 
+    });
+  } catch (e: any) {
+    if (e?.message?.includes('Unknown argument `span`') || e?.message?.includes('Unknown argument "span"')) {
+      await prisma.task.updateMany({ 
+        where: { id: taskId, userId: targetId }, 
+        data: { title, description } 
+      });
+    } else {
+      throw e;
+    }
+  }
+  revalidatePath('/');
+  revalidatePath('/overdue');
+  revalidatePath('/stats');
 }
-export async function createTask(data: { title: string; description: string; dueDate: Date }) {
-  const user = await getUser()
-  if (!user) return { ok: false as const, error: '请先登录' }
-  const targetId = user.id;
-  await prisma.task.create({ data: { ...data, userId: targetId } })
-  revalidatePath('/')
-  revalidatePath('/stats')
-  return { ok: true as const }
+
+export async function createTask(data: { title: string; description: string; dueDate: Date; span?: string }) {
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return { ok: false as const, error: '无法获取用户标识' };
+  try {
+    await prisma.task.create({ 
+      data: { 
+        title: data.title,
+        description: data.description || '',
+        dueDate: data.dueDate,
+        span: data.span || '当天',
+        userId: targetId 
+      } 
+    });
+  } catch (e: any) {
+    if (e?.message?.includes('Unknown argument `span`') || e?.message?.includes('Unknown argument "span"')) {
+      await prisma.task.create({ 
+        data: { 
+          title: data.title,
+          description: data.description || '',
+          dueDate: data.dueDate,
+          userId: targetId 
+        } 
+      });
+    } else {
+      throw e;
+    }
+  }
+  revalidatePath('/');
+  revalidatePath('/stats');
+  return { ok: true as const };
 }
+
 export async function createHabit(data: { title: string; icon: string }) {
-  const user = await getUser()
-  if (!user) return { ok: false as const, error: '请先登录' }
-  const targetId = user.id;
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return { ok: false as const, error: '无法获取用户标识' };
   await prisma.habit.create({ data: { ...data, userId: targetId } })
   revalidatePath('/')
   revalidatePath('/stats')
   return { ok: true as const }
 }
+
 export async function toggleHabitCheckIn(habitId: string) {
-  const user = await getUser(); if (!user) return;
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return;
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
-  const existingLog = await prisma.habitLog.findFirst({ where: { habitId, date: { gte: todayStart } } })
+  const existingLog = await prisma.habitLog.findFirst({
+    where: {
+      habitId,
+      habit: { userId: targetId },
+      date: { gte: todayStart }
+    }
+  })
   if (existingLog) {
     await prisma.habitLog.delete({ where: { id: existingLog.id } })
-    const habit = await prisma.habit.findUnique({ where: { id: habitId } })
+    const habit = await prisma.habit.findUnique({ where: { id: habitId, userId: targetId } })
     if (habit && habit.streak > 0) {
       await prisma.habit.update({ where: { id: habitId }, data: { streak: { decrement: 1 } } })
     }
   } else {
     await prisma.habitLog.create({ data: { date: new Date(), habitId } })
-    await prisma.habit.update({ where: { id: habitId }, data: { streak: { increment: 1 } } })
+    await prisma.habit.updateMany({ where: { id: habitId, userId: targetId }, data: { streak: { increment: 1 } } })
   }
   revalidatePath('/')
   revalidatePath('/stats')
 }
 
-  export async function updateHabit(habitId: string, data: { title: string; icon: string }) {
-    await prisma.habit.update({ where: { id: habitId }, data });
-    revalidatePath('/');
-    revalidatePath('/stats');
-    revalidatePath('/profile');
-  }
-  export async function deleteHabit(habitId: string) {
-    await prisma.habitLog.deleteMany({ where: { habitId } });
-    await prisma.habit.delete({ where: { id: habitId } });
-    revalidatePath('/');
-    revalidatePath('/stats');
-    revalidatePath('/profile');
-  }
+export async function updateHabit(habitId: string, data: { title: string; icon: string }) {
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return;
+  await prisma.habit.updateMany({ where: { id: habitId, userId: targetId }, data });
+  revalidatePath('/');
+  revalidatePath('/stats');
+  revalidatePath('/profile');
+}
+
+export async function deleteHabit(habitId: string) {
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return;
+  await prisma.habitLog.deleteMany({ where: { habitId, habit: { userId: targetId } } });
+  await prisma.habit.deleteMany({ where: { id: habitId, userId: targetId } });
+  revalidatePath('/');
+  revalidatePath('/stats');
+  revalidatePath('/profile');
+}
   
 export async function deleteTask(taskId: string) {
-  const user = await getUser(); if (!user) return;
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return;
 
-  await prisma.task.delete({ where: { id: taskId } })
+  await prisma.task.deleteMany({ where: { id: taskId, userId: targetId } })
   revalidatePath('/')
   revalidatePath('/stats')
 }
@@ -196,9 +314,8 @@ export async function getWeeklySummary(year: number, week: number) {
 }
 
 export async function saveWeeklySummary(year: number, week: number, content: string) {
-  const user = await getUser();
-  if (!user) return;
-  const targetId = user.id;
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return;
   await prisma.weeklySummary.upsert({
     where: { userId_year_week: { userId: targetId, year, week } },
     update: { content },
@@ -212,13 +329,19 @@ export async function getOverdueTasks() {
   if (!targetId) return [];
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
-  return await prisma.task.findMany({
+  const pastIncompleteTasks = await prisma.task.findMany({
     where: { 
       userId: targetId, 
       isCompleted: false, 
       dueDate: { lt: todayStart } 
     },
     orderBy: { dueDate: 'asc' }
+  });
+
+  // 只有超过跨度天数且未完成的才算真正逾期
+  return pastIncompleteTasks.filter(task => {
+    const spanInfo = getTaskSpanInfo(task, todayStart);
+    return spanInfo.isOverdue;
   });
 }
 
@@ -317,9 +440,8 @@ export async function getMemoCount() {
 }
 
 export async function createMemo(data: { id?: string; content: string; tags: string[] }) {
-  const user = await getUser();
-  if (!user) return { ok: false as const, error: "请先登录" };
-  const targetId = user.id;
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return { ok: false as const, error: "无法识别用户" };
   const trimmed = data.content?.trim();
   if (!trimmed) return { ok: false as const, error: "内容不能为空" };
   if (trimmed.length > 1000) return { ok: false as const, error: "内容不能超过1000字" };
@@ -330,7 +452,7 @@ export async function createMemo(data: { id?: string; content: string; tags: str
 
   const existing = await prisma.memo.findUnique({ where: { id: memoId } });
   if (existing) {
-    if (existing.userId !== user.id) {
+    if (existing.userId !== targetId) {
       return { ok: false as const, error: "无权操作他人记录" };
     }
     const updated = await prisma.memo.update({
@@ -361,9 +483,8 @@ export async function createMemo(data: { id?: string; content: string; tags: str
 }
 
 export async function deleteMemo(memoId: string) {
-  const user = await getUser();
-  if (!user) return { ok: false as const, error: "请先登录" };
-  const targetId = user.id;
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return { ok: false as const, error: "无法识别用户" };
 
   const res = await prisma.memo.deleteMany({
     where: { id: memoId, userId: targetId }
@@ -441,9 +562,8 @@ export async function getTags() {
 }
 
 export async function createTag(name: string, color = "#A78BFA") {
-  const user = await getUser();
-  if (!user) return { ok: false as const, error: "请先登录" };
-  const targetId = user.id;
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return { ok: false as const, error: "无法识别用户" };
   const trimmed = name?.trim().replace(/^#+/, "");
   if (!trimmed) return { ok: false as const, error: "标签名不能为空" };
   if (trimmed.length > 20) return { ok: false as const, error: "标签名不能超过20个字符" };
@@ -469,15 +589,14 @@ export async function createTag(name: string, color = "#A78BFA") {
 }
 
 export async function updateTag(tagId: string, name: string, color: string) {
-  const user = await getUser();
-  if (!user) return { ok: false as const, error: "请先登录" };
-  const targetId = user.id;
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return { ok: false as const, error: "无法识别用户" };
   const trimmed = name?.trim().replace(/^#+/, "");
   if (!trimmed) return { ok: false as const, error: "标签名不能为空" };
   if (trimmed.length > 20) return { ok: false as const, error: "标签名不能超过20个字符" };
 
   const existing = await prisma.tag.findUnique({ where: { id: tagId } });
-  if (!existing || existing.userId !== user.id) {
+  if (!existing || existing.userId !== targetId) {
     return { ok: false as const, error: "标签不存在或无权修改" };
   }
 
@@ -521,12 +640,11 @@ export async function updateTag(tagId: string, name: string, color: string) {
 }
 
 export async function deleteTag(tagId: string) {
-  const user = await getUser();
-  if (!user) return { ok: false as const, error: "请先登录" };
-  const targetId = user.id;
+  const targetId = await getEffectiveUserId();
+  if (!targetId) return { ok: false as const, error: "无法识别用户" };
 
   const existing = await prisma.tag.findUnique({ where: { id: tagId } });
-  if (!existing || existing.userId !== user.id) {
+  if (!existing || existing.userId !== targetId) {
     return { ok: false as const, error: "标签不存在或无权删除" };
   }
 

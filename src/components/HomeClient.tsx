@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { toggleTask, updateTaskDetails, deleteTask, toggleHabitCheckIn } from '@/app/actions';
+import { toggleTask, updateTaskDetails, deleteTask, toggleHabitCheckIn, resetDemoSandbox } from '@/app/actions';
 import { toast, confirmDialog } from '@/components/Feedback';
 import AddFAB from '@/components/AddFAB';
+import { getTaskSpanInfo, cleanDescription, parseSpanText } from '@/lib/task-utils';
 
-export default function HomeClient({ user, tasks, habits, memos, isDemo }: { user: any, tasks: any[], habits: any[], memos: any[], isDemo?: boolean }) {
+export default function HomeClient({ user, tasks, habits, memos, overdueCount = 0, isDemo }: { user: any, tasks: any[], habits: any[], memos: any[], overdueCount?: number, isDemo?: boolean }) {
   const router = useRouter();
   const [tab, setTab] = useState<'task' | 'idea'>('task');
   const [isAnimating, setIsAnimating] = useState(false);
@@ -48,10 +49,12 @@ export default function HomeClient({ user, tasks, habits, memos, isDemo }: { use
     setIsSubmitting(true);
     const formData = new FormData(e.currentTarget);
     try {
+      const originalSpan = selectedTask.span || parseSpanText(null, selectedTask.description).spanText || '当天';
       await updateTaskDetails(
         selectedTask.id,
         formData.get('title') as string,
-        formData.get('description') as string
+        (formData.get('description') as string || '').trim(),
+        originalSpan
       );
       setSelectedTask(null);
       toast.success('任务已保存');
@@ -84,12 +87,49 @@ export default function HomeClient({ user, tasks, habits, memos, isDemo }: { use
       
       {/* Header 问候语 */}
         <div className="px-6 pt-12 pb-6 relative">
-          <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2 relative w-max">
-            {user ? `你好，${user.name || user.username}` : <>你好，<span onClick={() => router.push('/login')} className="text-blue-600 hover:text-blue-700 cursor-pointer underline decoration-blue-200 underline-offset-4 transition-colors">请登录</span></>} <span className="animate-bounce origin-bottom-right">👋</span>
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2 relative w-max">
+              {user ? (
+                `你好，${user.name || user.username}`
+              ) : (
+                <>
+                  你好，
+                  <span
+                    onClick={() => router.push('/login')}
+                    className="text-blue-600 hover:text-blue-700 cursor-pointer underline decoration-blue-200 underline-offset-4 transition-colors"
+                  >
+                    请登录
+                  </span>
+                </>
+              )}
+              <span className="animate-bounce origin-bottom-right">👋</span>
+              {isDemo && (
+                <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200 shadow-sm ml-1">
+                  展示样例
+                </span>
+              )}
+            </h1>
+
             {isDemo && (
-              <span className="absolute -right-10 -top-3 text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200 shadow-sm opacity-90 rotate-[15deg]">展示样例</span>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (await confirmDialog('确定要将预演数据重置为初始状态吗？此操作会清除您在本次免登录体验中新增或修改的内容。')) {
+                    await resetDemoSandbox();
+                    toast.success('已恢复为初始预演数据');
+                    router.refresh();
+                  }
+                }}
+                className="text-xs font-semibold text-slate-400 hover:text-slate-600 bg-white/80 hover:bg-white border border-slate-200/80 px-2.5 py-1 rounded-full shadow-sm transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                title="重置预演数据"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                重置
+              </button>
             )}
-          </h1>
+          </div>
           <p className="text-sm text-slate-500 font-medium mt-1">今天是 {mounted ? todayStr : ''}</p>
         </div>
 
@@ -97,30 +137,41 @@ export default function HomeClient({ user, tasks, habits, memos, isDemo }: { use
       <div className="px-5 mb-4">
         <div className="flex justify-between items-center">
           
-          <div className="flex bg-slate-200/60 p-0.5 rounded-full">
+          <div className="flex bg-slate-200/60 p-0.5 rounded-full shrink-0">
             <button 
               onClick={() => handleSwitchTab('task')} 
-              className={`px-4 py-1.5 text-base rounded-full transition-all ${tab === 'task' ? 'font-bold bg-white text-slate-800 shadow-[0_2px_8px_rgba(0,0,0,0.04)]' : 'font-medium text-slate-500 hover:text-slate-700'}`}
+              className={`px-3.5 sm:px-4 py-1.5 text-sm sm:text-base rounded-full transition-all whitespace-nowrap ${tab === 'task' ? 'font-bold bg-white text-slate-800 shadow-[0_2px_8px_rgba(0,0,0,0.04)]' : 'font-medium text-slate-500 hover:text-slate-700'}`}
             >
               今日任务
             </button>
             <button 
               onClick={() => handleSwitchTab('idea')} 
-              className={`px-4 py-1.5 text-base rounded-full transition-all ${tab === 'idea' ? 'font-bold bg-white text-slate-800 shadow-[0_2px_8px_rgba(0,0,0,0.04)]' : 'font-medium text-slate-500 hover:text-slate-700'}`}
+              className={`px-3.5 sm:px-4 py-1.5 text-sm sm:text-base rounded-full transition-all whitespace-nowrap ${tab === 'idea' ? 'font-bold bg-white text-slate-800 shadow-[0_2px_8px_rgba(0,0,0,0.04)]' : 'font-medium text-slate-500 hover:text-slate-700'}`}
             >
               近期灵感
             </button>
           </div>
           
-          <div className={`transition-opacity duration-300 flex items-center gap-1 shrink-0 scale-95 origin-right ${tab === 'task' ? 'opacity-100' : 'opacity-0 hidden'}`}>
-            <button onClick={() => router.push('/overdue')} className="flex items-center gap-0.5 text-xs font-bold text-red-500 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-full border border-red-100 transition-colors shadow-sm cursor-pointer">
-              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-              查看逾期
-            </button>
-            <span className="text-xs font-bold text-slate-400 bg-slate-100/80 px-2 py-1 rounded-full border border-slate-200/50 shadow-sm">{completedTasks} / {totalTasks} 已完成</span>
+          {/* 右侧：上下垂直排列，节省横向空间 */}
+          <div className={`transition-opacity duration-300 flex flex-col items-end justify-center shrink-0 gap-1 ${tab === 'task' ? 'opacity-100' : 'opacity-0 hidden'}`}>
+            {overdueCount > 0 && (
+              <button 
+                onClick={() => router.push('/overdue')} 
+                className="flex items-center gap-1 text-[11px] font-bold text-red-500 bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded-full border border-red-200/80 transition-all shadow-xs cursor-pointer active:scale-95"
+                title="查看逾期任务"
+              >
+                <svg className="w-3 h-3 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>逾期 {overdueCount}</span>
+              </button>
+            )}
+            <span className="text-[10px] font-bold text-slate-400 bg-slate-100/90 px-2 py-0.5 rounded-full border border-slate-200/60 shadow-xs whitespace-nowrap">
+              {completedTasks} / {totalTasks} 已完成
+            </span>
           </div>
           
-          <div className={`transition-opacity duration-300 ${tab === 'idea' ? 'opacity-100' : 'opacity-0 hidden'}`}>
+          <div className={`transition-opacity duration-300 shrink-0 ${tab === 'idea' ? 'opacity-100' : 'opacity-0 hidden'}`}>
             <button onClick={() => router.push('/memos')} className="flex items-center gap-0.5 text-xs font-bold text-purple-500 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-full transition-colors border border-purple-100 cursor-pointer">
               全部灵感
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"></path></svg>
@@ -142,8 +193,9 @@ export default function HomeClient({ user, tasks, habits, memos, isDemo }: { use
           ) : (
             tasks.map(task => {
               const taskDate = new Date(task.dueDate);
-              const isOverdue = taskDate < todayStart && !task.isCompleted;
+              const spanInfo = getTaskSpanInfo(task, todayStart);
 
+              // 1. 已完成任务
               if (task.isCompleted) {
                 return (
                   <div key={task.id} className="bg-white/60 border border-slate-100 rounded-[20px] p-4 flex items-start gap-3 opacity-60 transition-colors hover:opacity-80">
@@ -154,16 +206,24 @@ export default function HomeClient({ user, tasks, habits, memos, isDemo }: { use
                     </form>
                     <div className="flex flex-col flex-1 cursor-pointer" onClick={() => setSelectedTask(task)}>
                       <span className="text-base font-bold text-slate-400 line-through decoration-slate-300">{task.title}</span>
-                      <div className="flex items-center gap-1 text-xs font-medium text-slate-400 mt-1">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        {taskDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) === '23:59' ? '全天' : `${taskDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 截止`}
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400 mt-1 flex-wrap">
+                        <span className="flex items-center gap-1">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                          {taskDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) === '23:59' ? '全天' : `${taskDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 截止`}
+                        </span>
+                        {spanInfo.isMultiDay && spanInfo.badgeText && (
+                          <span className="px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded-md text-[10px] font-semibold">
+                            {spanInfo.badgeText}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
                 );
               }
 
-              if (isOverdue) {
+              // 2. 真正逾期任务
+              if (spanInfo.isOverdue) {
                 return (
                   <div key={task.id} className="bg-[#FFF8F8] border border-red-100 rounded-[20px] p-4 flex items-start gap-3 shadow-[0_4px_20px_rgba(239,68,68,0.03)] hover:border-red-200 transition-colors cursor-pointer">
                     <form action={async () => await toggleTask(task.id, true)} className="mt-0.5 shrink-0">
@@ -174,20 +234,40 @@ export default function HomeClient({ user, tasks, habits, memos, isDemo }: { use
                       <div className="flex items-center gap-1 text-xs font-bold text-red-500 mt-1.5 bg-red-50 w-fit px-1.5 py-0.5 rounded-md">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         逾期未完成
-                        {(() => {
-                          const spanMatch = task.description?.match(/\[跨度:\s*(.*?)\]/);
-                          const spanText = spanMatch ? spanMatch[1] : null;
-                          if (spanText && spanText !== '当天') {
-                            return <span className="ml-1 px-1.5 py-0.5 bg-red-100 text-red-600 rounded-md text-[10px] tracking-wide">短期</span>;
-                          }
-                          return null;
-                        })()}
+                        {spanInfo.badgeText && (
+                          <span className="ml-1 px-1.5 py-0.5 bg-red-100 text-red-600 rounded-md text-[10px] tracking-wide">{spanInfo.badgeText}</span>
+                        )}
                       </div>
                     </div>
                   </div>
                 );
               }
 
+              // 3. 跨度多天短期进行中任务（在跨度天数内，如“第 2/3 天”）
+              if (spanInfo.isMultiDay) {
+                return (
+                  <div key={task.id} className="bg-gradient-to-r from-white via-indigo-50/20 to-white border border-indigo-100/90 rounded-[20px] p-4 flex items-start gap-3 shadow-[0_4px_20px_rgba(99,102,241,0.03)] hover:border-indigo-200 transition-all cursor-pointer">
+                    <form action={async () => await toggleTask(task.id, true)} className="mt-0.5 shrink-0">
+                      <button type="submit" className="w-5 h-5 rounded-full border-2 border-indigo-200 flex items-center justify-center bg-indigo-50/50 hover:bg-indigo-100 hover:border-indigo-400 transition-colors cursor-pointer"></button>
+                    </form>
+                    <div className="flex flex-col flex-1 cursor-pointer" onClick={() => setSelectedTask(task)}>
+                      <span className="text-base font-bold text-slate-800">{task.title}</span>
+                      <div className="flex items-center gap-2 text-xs font-semibold mt-1.5 flex-wrap">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-100/80 text-indigo-600 font-bold text-[11px] tracking-tight shadow-xs">
+                          <svg className="w-3 h-3 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                          {spanInfo.badgeText}
+                        </span>
+                        <span className="text-slate-400 text-[11px] flex items-center gap-1">
+                          <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                          {taskDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) === '23:59' ? '全天' : `${taskDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 截止`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // 4. 当天普通任务
               return (
                 <div key={task.id} className="bg-white border border-slate-100/80 rounded-[20px] p-4 flex items-start gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:border-blue-100 transition-colors cursor-pointer">
                   <form action={async () => await toggleTask(task.id, true)} className="mt-0.5 shrink-0">
@@ -198,15 +278,7 @@ export default function HomeClient({ user, tasks, habits, memos, isDemo }: { use
                     <div className="flex items-center gap-1 text-xs font-bold text-blue-500 mt-1.5">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                       {taskDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) === '23:59' ? '全天' : `${taskDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 截止`}
-                      {(() => {
-                          const spanMatch = task.description?.match(/\[跨度:\s*(.*?)\]/);
-                          const spanText = spanMatch ? spanMatch[1] : null;
-                          if (spanText && spanText !== '当天') {
-                            return <span className="ml-1.5 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-md text-[10px] tracking-wide">短期</span>;
-                          }
-                          return null;
-                        })()}
-                      </div>
+                    </div>
                   </div>
                 </div>
               );
@@ -326,7 +398,7 @@ export default function HomeClient({ user, tasks, habits, memos, isDemo }: { use
                 <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">详细备注</label>
                 <textarea 
                   name="description" 
-                  defaultValue={selectedTask.description || ''} 
+                  defaultValue={cleanDescription(selectedTask.description)} 
                   placeholder="在这里补充或查看任务的详细内容..." 
                   className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 h-32 resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-all" 
                 />

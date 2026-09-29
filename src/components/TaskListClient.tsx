@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { CheckCircle2, Circle, Clock, X, AlertCircle } from 'lucide-react';
 import { toggleTask, updateTaskDetails, deleteTask } from '@/app/actions';
 import { toast, confirmDialog } from '@/components/Feedback';
+import { getTaskSpanInfo, cleanDescription, parseSpanText } from '@/lib/task-utils';
 
 export default function TaskListClient({ tasks }: { tasks: any[] }) {
   const [selectedTask, setSelectedTask] = useState<any>(null);
@@ -18,10 +19,12 @@ export default function TaskListClient({ tasks }: { tasks: any[] }) {
     setIsSubmitting(true);
     const formData = new FormData(e.currentTarget);
     try {
+      const originalSpan = selectedTask.span || parseSpanText(null, selectedTask.description).spanText || '当天';
       await updateTaskDetails(
         selectedTask.id,
         formData.get('title') as string,
-        formData.get('description') as string
+        (formData.get('description') as string || '').trim(),
+        originalSpan
       );
       setSelectedTask(null);
       toast.success('任务已保存');
@@ -61,7 +64,8 @@ export default function TaskListClient({ tasks }: { tasks: any[] }) {
       <div className="space-y-3">
         {tasks.map(task => {
           const taskDate = new Date(task.dueDate);
-          const isOverdue = taskDate < todayStart && !task.isCompleted;
+          const spanInfo = getTaskSpanInfo(task, todayStart);
+          const isOverdue = spanInfo.isOverdue || (taskDate < todayStart && !task.isCompleted && !spanInfo.isWithinSpan);
 
           return (
             <div key={task.id} className={`flex items-center p-4 bg-white rounded-2xl shadow-sm border transition-all ${task.isCompleted ? 'opacity-60 border-slate-100' : isOverdue ? 'border-red-100 bg-red-50/30' : 'border-slate-100 hover:border-blue-100 hover:shadow-md'}`}>
@@ -90,7 +94,15 @@ export default function TaskListClient({ tasks }: { tasks: any[] }) {
                 </h3>
                 <div className={`flex items-center text-xs mt-1 font-semibold ${task.isCompleted ? 'text-slate-400' : isOverdue ? 'text-red-500' : 'text-blue-500'}`}>
                   {isOverdue ? (
-                    <><AlertCircle className="w-3 h-3 mr-1" />逾期未完成</>
+                    <>
+                      <AlertCircle className="w-3 h-3 mr-1 shrink-0" />
+                      逾期未完成
+                      {spanInfo.isMultiDay && spanInfo.badgeText && (
+                        <span className="ml-1.5 px-1.5 py-0.2 bg-red-100 text-red-600 rounded text-[10px]">
+                          {spanInfo.badgeText}
+                        </span>
+                      )}
+                    </>
                   ) : (
                     <>{taskDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) === '23:59' ? <><Clock className="w-3 h-3 mr-1" />全天</> : <><Clock className="w-3 h-3 mr-1" />{taskDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 截止</>}</>
                   )}
@@ -127,7 +139,7 @@ export default function TaskListClient({ tasks }: { tasks: any[] }) {
                 <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">详细备注</label>
                 <textarea 
                   name="description" 
-                  defaultValue={selectedTask.description || ''} 
+                  defaultValue={cleanDescription(selectedTask.description)} 
                   placeholder="在这里补充或查看任务的详细内容..." 
                   className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 h-32 resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-all" 
                 />

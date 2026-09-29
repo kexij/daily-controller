@@ -32,7 +32,7 @@ export default function AccountSettingsClient({ user }: { user: any }) {
     const ok = await confirmDialog('确定要退出登录吗？');
     if (!ok) return;
     await logout();
-    router.push('/login');
+    router.push('/');
     router.refresh();
   }
 

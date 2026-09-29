@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies, headers } from 'next/headers';
+import { prisma } from '@/lib/prisma';
 
 const secretKey = process.env.JWT_SECRET || 'super-secret-key-for-dev';
 const key = new TextEncoder().encode(secretKey);
@@ -69,4 +70,17 @@ export async function createSession(userId: string) {
 export async function clearSession() {
   const cookieStore = await cookies();
   cookieStore.delete('session');
+  cookieStore.set('session', '', {
+    httpOnly: true,
+    expires: new Date(0),
+    maxAge: 0,
+    path: '/',
+  });
 }
+
+export async function getUser() {
+  const session = await getSession();
+  if (!session?.userId) return null;
+  return await prisma.user.findUnique({ where: { id: session.userId } });
+}
+

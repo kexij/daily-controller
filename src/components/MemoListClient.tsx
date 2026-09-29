@@ -1,17 +1,11 @@
-
 "use client";
 
-import React, { useState, useMemo, useRef } from "react";
-import { Search, Trash2, Copy, Check, ChevronLeft, Plus, X, Settings2 } from "lucide-react";
-import { createMemo, deleteMemo, createTag, deleteTag } from "@/app/actions";
+import React, { useState, useMemo, useEffect } from "react";
+import { Search, Trash2, Copy, Check, ChevronLeft, Plus, Settings2 } from "lucide-react";
+import { createMemo, deleteMemo, createTag } from "@/app/actions";
 import { toast, confirmDialog } from "@/components/Feedback";
 import { useRouter } from "next/navigation";
-
-interface TagItem {
-  id: string;
-  name: string;
-  color: string;
-}
+import TagManagerModal, { TagItem, getTagColorDef } from "./TagManagerModal";
 
 interface MemoItem {
   id: string;
@@ -34,20 +28,23 @@ export default function MemoListClient({
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>("全部");
 
-  // Create Area State
+  // 当外部传入数据刷新时，自动保持内部状态同步
+  useEffect(() => {
+    setTags(initialTags);
+  }, [initialTags]);
+
+  useEffect(() => {
+    setMemos(initialMemos);
+  }, [initialMemos]);
+
+  // 新建灵感状态
   const [newContent, setNewContent] = useState("");
   const [selectedTagsForCreate, setSelectedTagsForCreate] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Tag Management State
-  const [isManaging, setIsManaging] = useState(false);
-  const [isAddTagModalOpen, setIsAddTagModalOpen] = useState(false);
-  const [newTagName, setNewTagName] = useState("");
-  const colors = ['#A78BFA', '#60A5FA', '#34D399', '#FBBF24', '#F472B6', '#2DD4BF', '#FB923C', '#818CF8'];
-  const [newTagColor, setNewTagColor] = useState(colors[0]);
-  
+  // 标签管理弹窗状态
+  const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
 
   const getFreshColor = (c?: string) => {
     if (!c) return '#CBD5E1';
@@ -56,12 +53,79 @@ export default function MemoListClient({
       'blue': '#60A5FA',
       'amber': '#FBBF24',
       'green': '#34D399',
+      'emerald': '#34D399',
       'red': '#F472B6',
-      'orange': '#FB923C'
+      'rose': '#F472B6',
+      'orange': '#FB923C',
+      'indigo': '#818CF8',
+      'slate': '#94A3B8'
     };
     return legacyMap[c] || c;
   };
 
+  // 标签管理变更后，全方位联动同步（新建区域、筛选区域、已有灵感）
+  const handleTagsChange = (
+    nextTags: TagItem[],
+    cascade?: { oldName?: string; newName?: string; deletedName?: string }
+  ) => {
+    setTags(nextTags);
+
+    // 1. 如果修改重命名了标签 (oldName -> newName)
+    if (cascade?.oldName && cascade?.newName) {
+      const { oldName, newName } = cascade;
+      // 实时同步新建灵感的选中标签列表
+      setSelectedTagsForCreate(prev =>
+        prev.map(t => (t === oldName ? newName : t))
+      );
+      // 实时同步当前筛选标签
+      if (selectedTagFilter === oldName) {
+        setSelectedTagFilter(newName);
+      }
+      // 实时同步已展示灵感卡片中的标签名
+      setMemos(prev =>
+        prev.map(m => {
+          try {
+            const arr = JSON.parse(m.tags || "[]");
+            if (Array.isArray(arr) && arr.includes(oldName)) {
+              return {
+                ...m,
+                tags: JSON.stringify(arr.map((t: string) => (t === oldName ? newName : t))),
+              };
+            }
+          } catch {}
+          return m;
+        })
+      );
+    }
+
+    // 2. 如果删除了标签 (deletedName)
+    if (cascade?.deletedName) {
+      const { deletedName } = cascade;
+      // 从新建灵感选中列表中移除已删除标签
+      setSelectedTagsForCreate(prev => prev.filter(t => t !== deletedName));
+      // 若当前筛选为已删除标签，重置回全部
+      if (selectedTagFilter === deletedName) {
+        setSelectedTagFilter("全部");
+      }
+      // 从已展示灵感卡片中剔除该标签
+      setMemos(prev =>
+        prev.map(m => {
+          try {
+            const arr = JSON.parse(m.tags || "[]");
+            if (Array.isArray(arr) && arr.includes(deletedName)) {
+              return {
+                ...m,
+                tags: JSON.stringify(arr.filter((t: string) => t !== deletedName)),
+              };
+            }
+          } catch {}
+          return m;
+        })
+      );
+    }
+
+    router.refresh();
+  };
 
   // Computed
   const tagCounts = useMemo(() => {
@@ -116,47 +180,11 @@ export default function MemoListClient({
       }
       toast.success("记录成功");
       setNewContent("");
-      // Refresh list
       router.refresh();
-      // optimistic update is tricky since we don't get the full object back in the simple `createMemo` without changing backend. 
-      // A router.refresh() handles the UI sync.
     } catch (err) {
       toast.error("记录失败");
     } finally {
       setIsSubmitting(false);
-    }
-  }
-
-  async function handleCreateTag() {
-    if (!newTagName.trim()) return;
-    try {
-      const res = await createTag(newTagName, newTagColor);
-      if (res && res.ok && res.tag) {
-        if (!tags.some(t => t.name === res.tag.name)) {
-          setTags([...tags, res.tag]);
-        }
-        setIsAddTagModalOpen(false);
-        setNewTagName("");
-      } else if (res && res.error) {
-        toast.error(res.error);
-      }
-    } catch (e) {
-      toast.error("添加标签失败");
-    }
-  }
-
-  async function handleDeleteTagAction(tagId: string, tagName: string) {
-    if (!(await confirmDialog(`确定要删除标签 #${tagName} 吗？`))) return;
-    try {
-      const res = await deleteTag(tagId);
-      if (res && res.ok) {
-        setTags(tags.filter(t => t.id !== tagId));
-        setSelectedTagsForCreate(prev => prev.filter(t => t !== tagName));
-        toast.success("已删除");
-        router.refresh();
-      }
-    } catch {
-      toast.error("删除失败");
     }
   }
 
@@ -192,7 +220,7 @@ export default function MemoListClient({
       
       {/* Header 区域 */}
       <div className="px-5 pt-8 pb-4">
-        <button onClick={() => router.push('/stats')} className="flex items-center text-slate-500 font-medium text-[15px] mb-4 hover:text-slate-800 transition-colors">
+        <button onClick={() => router.push('/stats')} className="flex items-center text-slate-500 font-medium text-[15px] mb-4 hover:text-slate-800 transition-colors cursor-pointer">
           <ChevronLeft className="w-4 h-4 mr-1" />
           返回复盘
         </button>
@@ -208,7 +236,7 @@ export default function MemoListClient({
         <p className="text-slate-500 text-[14px] font-medium">捕捉一闪而过的火花与生活备忘</p>
       </div>
 
-      {/* 记录卡片 */}
+      {/* 记录卡片（新建灵感区） */}
       <div className="mx-5 bg-white rounded-[24px] p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col gap-4 relative z-10">
         <textarea 
           value={newContent}
@@ -223,7 +251,7 @@ export default function MemoListClient({
           className="w-full bg-[#F8FAFC] border border-slate-100 rounded-[16px] px-4 py-3.5 text-[14px] font-medium text-slate-700 h-24 resize-none focus:outline-none focus:border-purple-200 focus:ring-4 focus:ring-purple-50 transition-all"
         ></textarea>
         
-        {/* 标签展示区 */}
+        {/* 标签选择区 */}
         <div className="flex flex-wrap gap-2.5 items-center">
           {tags.map(tag => {
             const isSelected = selectedTagsForCreate.includes(tag.name);
@@ -231,47 +259,31 @@ export default function MemoListClient({
               ? "bg-slate-800 text-white shadow-sm border-transparent"
               : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50";
             
-            const shakeClass = isManaging ? "animate-[wiggle_0.25s_ease-in-out_infinite]" : "";
-            
             return (
-              <div key={tag.id} className={`relative inline-block ${shakeClass}`}>
-                <button 
-                  onClick={() => {
-                    if (isManaging) return;
-                    setSelectedTagsForCreate(prev => 
-                      prev.includes(tag.name) ? prev.filter(t => t !== tag.name) : [...prev, tag.name]
-                    );
-                  }} 
-                  className={`px-3.5 py-1.5 rounded-full text-[13px] font-bold border transition-all flex items-center gap-1.5 ${baseClasses}`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: getFreshColor(tag.color) }}></span>
-                  #{tag.name}
-                </button>
-                {isManaging && (
-                  <button 
-                    onClick={() => handleDeleteTagAction(tag.id, tag.name)} 
-                    className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] bg-red-500 text-white rounded-full flex items-center justify-center shadow-md hover:bg-red-600 transition-all z-10 border border-white"
-                  >
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                )}
-              </div>
+              <button 
+                key={tag.id}
+                type="button"
+                onClick={() => {
+                  setSelectedTagsForCreate(prev => 
+                    prev.includes(tag.name) ? prev.filter(t => t !== tag.name) : [...prev, tag.name]
+                  );
+                }} 
+                className={`px-3.5 py-1.5 rounded-full text-[13px] font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${baseClasses}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: getFreshColor(tag.color) }}></span>
+                #{tag.name}
+              </button>
             );
           })}
 
-          {isManaging && (
-            <button onClick={() => setIsAddTagModalOpen(true)} className="px-3.5 py-1.5 rounded-full text-[13px] font-bold bg-[#F1F5F9] text-slate-500 border border-transparent hover:bg-slate-200 transition-all flex items-center gap-1">
-              <Plus className="w-3.5 h-3.5" />
-              新标签
-            </button>
-          )}
-          
           <button 
-            onClick={() => setIsManaging(!isManaging)} 
-            className={`px-3 py-1.5 rounded-full text-[13px] font-bold transition-all flex items-center gap-1 ml-auto ${isManaging ? 'text-blue-500 bg-blue-50' : 'text-slate-400 bg-transparent hover:bg-slate-100'}`}
+            type="button"
+            onClick={() => setIsTagManagerOpen(true)} 
+            className="px-3 py-1.5 rounded-full text-[13px] font-bold text-slate-400 bg-transparent hover:bg-slate-100 transition-all flex items-center gap-1 ml-auto cursor-pointer"
+            title="管理/修改/删除标签"
           >
-            {isManaging ? <Check className="w-3.5 h-3.5" /> : <Settings2 className="w-3.5 h-3.5" />}
-            {isManaging ? '完成' : '管理'}
+            <Settings2 className="w-3.5 h-3.5" />
+            管理标签
           </button>
         </div>
         
@@ -279,7 +291,7 @@ export default function MemoListClient({
           <button 
             onClick={handleCreateMemo} 
             disabled={isSubmitting}
-            className="bg-[#D8B4FE] hover:bg-[#C084FC] text-white font-bold py-2.5 px-6 rounded-[14px] transition-all active:scale-95 text-[14px] shadow-lg shadow-purple-500/20 disabled:opacity-70 disabled:active:scale-100"
+            className="bg-[#D8B4FE] hover:bg-[#C084FC] text-white font-bold py-2.5 px-6 rounded-[14px] transition-all active:scale-95 text-[14px] shadow-lg shadow-purple-500/20 disabled:opacity-70 disabled:active:scale-100 cursor-pointer"
           >
             {isSubmitting ? '记录中...' : '记录灵感'}
           </button>
@@ -304,7 +316,7 @@ export default function MemoListClient({
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
           <button 
             onClick={() => setSelectedTagFilter("全部")}
-            className={`shrink-0 px-4 py-2 rounded-full text-[13px] font-bold flex items-center gap-1.5 transition-all ${selectedTagFilter === '全部' ? 'bg-[#1E293B] text-white shadow-md' : 'bg-white text-slate-600 border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.02)]'}`}
+            className={`shrink-0 px-4 py-2 rounded-full text-[13px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${selectedTagFilter === '全部' ? 'bg-[#1E293B] text-white shadow-md' : 'bg-white text-slate-600 border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.02)]'}`}
           >
             全部 <span className={`text-[11px] px-1.5 py-0.5 rounded-md ${selectedTagFilter === '全部' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500'}`}>{memos.length}</span>
           </button>
@@ -316,7 +328,7 @@ export default function MemoListClient({
               <button 
                 key={t.id}
                 onClick={() => setSelectedTagFilter(t.name)}
-                className={`shrink-0 px-4 py-2 rounded-full text-[13px] font-bold flex items-center gap-1.5 transition-all ${isSelected ? 'bg-[#1E293B] text-white shadow-md border border-transparent' : 'bg-white text-slate-600 border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.02)]'}`}
+                className={`shrink-0 px-4 py-2 rounded-full text-[13px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${isSelected ? 'bg-[#1E293B] text-white shadow-md border border-transparent' : 'bg-white text-slate-600 border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.02)]'}`}
               >
                 <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: getFreshColor(t.color) }}></span>
                 #{t.name} <span className={`text-[11px] px-1.5 py-0.5 rounded-md ${isSelected ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
@@ -359,10 +371,10 @@ export default function MemoListClient({
                   </div>
                   
                   <div className="flex items-center gap-1">
-                    <button onClick={() => handleCopy(memo.id, memo.content)} className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors">
+                    <button onClick={() => handleCopy(memo.id, memo.content)} className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer">
                       {copiedId === memo.id ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
-                    <button onClick={() => handleDeleteMemo(memo.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                    <button onClick={() => handleDeleteMemo(memo.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -372,60 +384,16 @@ export default function MemoListClient({
           })
         )}
       </div>
-      
-      {/* 新建标签专属弹窗 (Overlay) */}
-      <div className={`fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all duration-300 ${isAddTagModalOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-        <div className={`bg-white rounded-[28px] shadow-2xl w-full max-w-[320px] overflow-hidden flex flex-col transition-all duration-300 ${isAddTagModalOpen ? 'translate-y-0 scale-100' : 'translate-y-12 scale-95'}`}>
-          
-          <div className="flex justify-between items-center p-6 pb-4">
-            <h3 className="font-bold text-slate-800 text-[16px]">新建标签</h3>
-            <button onClick={() => setIsAddTagModalOpen(false)} className="p-2 bg-slate-100 text-slate-400 hover:text-slate-600 rounded-full transition-colors active:scale-95">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          
-          <div className="px-6 pb-6 flex flex-col gap-5">
-            <div>
-              <label className="block text-[12px] font-bold text-slate-400 mb-2">标签名称</label>
-              <input 
-                type="text" 
-                value={newTagName}
-                onChange={e => setNewTagName(e.target.value)}
-                placeholder="例如：学习" 
-                className="w-full bg-slate-50 border border-slate-100 rounded-[16px] px-4 py-3 text-[14px] font-bold text-slate-800 focus:outline-none focus:border-purple-300 focus:bg-white transition-all" 
-              />
-            </div>
-            
-            <div>
-              <label className="block text-[12px] font-bold text-slate-400 mb-2">选择颜色</label>
-              <div className="flex flex-wrap gap-3">
-                {colors.map(color => {
-                  const isSelected = newTagColor === color;
-                  return (
-                    <button 
-                      key={color}
-                      onClick={() => setNewTagColor(color)}
-                      className={`w-7 h-7 rounded-full relative transition-all duration-200 ${isSelected ? 'ring-2 ring-offset-2 scale-110' : 'hover:scale-110'}`} 
-                      style={{ backgroundColor: color, ...(isSelected ? { '--tw-ring-color': color } as any : {}) }}
-                    >
-                      {isSelected && <Check className="w-3 h-3 text-white absolute inset-0 m-auto" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            
-            <button 
-              onClick={handleCreateTag}
-              className="w-full mt-2 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-[16px] transition-all active:scale-95 shadow-md text-[14px]"
-            >
-              确定创建
-            </button>
-          </div>
-        </div>
-      </div>
+
+      {/* 完整标签管理弹窗（支持查看、重命名、修改颜色、删除级联、新增） */}
+      {isTagManagerOpen && (
+        <TagManagerModal
+          tags={tags}
+          onClose={() => setIsTagManagerOpen(false)}
+          onTagsChange={handleTagsChange}
+        />
+      )}
       
     </div>
   );
 }
-

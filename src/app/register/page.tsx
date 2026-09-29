@@ -60,6 +60,11 @@ export default function RegisterPage() {
             {loading ? '注册中...' : '注册账号'}
           </button>
         </form>
+        <div className="mt-4 text-center">
+          <Link href="/" className="inline-flex items-center text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors">
+            ← 返回看板 (展示样例)
+          </Link>
+        </div>
 
         <p className="text-center text-sm text-slate-500 mt-6">
           已有账号？ <Link href="/login" className="text-blue-600 font-bold hover:underline">去登录</Link>

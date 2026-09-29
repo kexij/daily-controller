@@ -56,6 +56,11 @@ export default function LoginPage() {
             {loading ? '登录中...' : '登录'}
           </button>
         </form>
+        <div className="mt-4 text-center">
+          <Link href="/" className="inline-flex items-center text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors">
+            ← 返回看板 (展示样例)
+          </Link>
+        </div>
 
         <p className="text-center text-sm text-slate-500 mt-6">
           还没有账号？ <Link href="/register" className="text-blue-600 font-bold hover:underline">立即注册</Link>

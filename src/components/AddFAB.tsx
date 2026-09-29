@@ -1,10 +1,9 @@
-
 'use client'
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { createTask, createMemo } from '@/app/actions';
+import { createTask, createMemo, getTags } from '@/app/actions';
 import { toast } from '@/components/Feedback';
 import CustomDatePicker from './CustomDatePicker';
 import CustomTimePicker from './CustomTimePicker';
@@ -26,18 +25,33 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
   const dateInputRef = useRef<HTMLInputElement>(null);
   const timeInputRef = useRef<HTMLInputElement>(null);
   
-  // Idea specific state
+  // Idea specific state - 动态标签
   const [selectedTags, setSelectedTags] = useState<string[]>(['灵感']);
-  const defaultTags = [
-    { name: '灵感', color: '#A78BFA' }, // 薰衣草紫
-    { name: '杂记', color: '#60A5FA' }, // 晴空蓝
-    { name: '备忘', color: '#FBBF24' }, // 阳光黄
-    { name: '车辆', color: '#34D399' }, // 薄荷绿
-    { name: '网络', color: '#F472B6' }  // 蜜桃粉
-  ];
+  const [tags, setTags] = useState<{ id?: string; name: string; color: string }[]>([
+    { name: '灵感', color: '#A78BFA' },
+    { name: '杂记', color: '#60A5FA' },
+    { name: '备忘', color: '#FBBF24' },
+    { name: '读书笔记', color: '#34D399' }
+  ]);
 
   const router = useRouter();
 
+  // 当打开弹窗时，实时拉取最新的持久化标签库
+  useEffect(() => {
+    if (isOpen) {
+      getTags()
+        .then(dbTags => {
+          if (dbTags && dbTags.length > 0) {
+            setTags(dbTags);
+            setSelectedTags(prev => {
+              const valid = prev.filter(p => dbTags.some(t => t.name === p));
+              return valid.length > 0 ? valid : [dbTags[0].name];
+            });
+          }
+        })
+        .catch(console.error);
+    }
+  }, [isOpen]);
 
   const getFreshColor = (c?: string) => {
     if (!c) return '#CBD5E1';
@@ -51,7 +65,6 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
     };
     return legacyMap[c] || c;
   };
-
 
   const toggleTag = (tagName: string) => {
     setSelectedTags(prev => 
@@ -67,14 +80,13 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
     try {
       const formData = new FormData(e.currentTarget);
       const title = formData.get('title') as string;
-      const descriptionRaw = formData.get('description') as string;
-      const span = formData.get('span') as string;
-      const description = descriptionRaw ? `${descriptionRaw}\n\n[跨度: ${span}]` : `[跨度: ${span}]`;
+      const description = (formData.get('description') as string || '').trim();
+      const span = (formData.get('span') as string) || '当天';
       
       let timeStr = taskTime || "23:59";
       const dueDate = new Date(`${taskDate}T${timeStr}:00`);
       
-      const res = await createTask({ title, description, dueDate });
+      const res = await createTask({ title, description, dueDate, span });
       if (res && res.ok === false) {
         toast.error(res.error);
         return;
@@ -182,17 +194,15 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
               </button>
             </div>
 
-            {/* Task Form (统一到与 Idea 类似的块状/圆润风格) */}
+            {/* Task Form */}
             <div className="relative h-[340px] w-full">
             {tab === 'task' && (
               <form onSubmit={handleTaskSubmit} className="absolute inset-0 px-6 pb-6 flex flex-col gap-4 animate-in fade-in slide-in-from-left-4 duration-300">
                 <div className="flex flex-col gap-3">
-                  {/* Task 标题也使用圆润的白框，保持风格统一 */}
                   <div className="relative">
                     <input name="title" autoFocus type="text" placeholder="你要完成什么任务？" className="w-full bg-white border border-slate-100/80 rounded-[20px] px-5 py-4 text-[15px] font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-200 focus:ring-4 focus:ring-blue-50 shadow-[0_4px_16px_-4px_rgba(0,0,0,0.04),0_0_0_1px_rgba(255,255,255,0.5)_inset] transition-all" required />
                   </div>
                   
-                  {/* 详细描述 */}
                   <textarea name="description" placeholder="添加详细描述... (可选)" className="w-full bg-white border border-slate-100/80 rounded-[20px] px-5 py-4 text-[13px] font-medium text-slate-700 h-24 resize-none focus:outline-none focus:border-blue-200 focus:ring-4 focus:ring-blue-50 shadow-[0_4px_16px_-4px_rgba(0,0,0,0.04),0_0_0_1px_rgba(255,255,255,0.5)_inset] transition-all placeholder:text-slate-400"></textarea>
                 </div>
                 
@@ -215,7 +225,7 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
                       {showTimePicker && <CustomTimePicker value={taskTime} onChange={setTaskTime} onClose={() => setShowTimePicker(false)} />}
                   </div>
 
-                  {/* 任务跨度 (短期/中期/长期) */}
+                  {/* 任务跨度 */}
                     <div className="ml-auto relative">
                       <input type="hidden" name="span" value={taskSpan} />
                       <button 
@@ -255,7 +265,7 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
               </form>
             )}
 
-            {/* Idea Form (保留原版) */}
+            {/* Idea Form - 动态标签选择 */}
             {tab === 'idea' && (
               <form onSubmit={handleIdeaSubmit} className="absolute inset-0 px-6 pb-6 flex flex-col gap-4 animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="relative">
@@ -271,12 +281,12 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
                     <span>标签</span>
                   </div>
                   
-                  <div className="flex flex-wrap gap-2 items-center flex-1">
-                    {defaultTags.map(tag => {
+                  <div className="flex flex-wrap gap-2 items-center flex-1 max-h-24 overflow-y-auto pr-1">
+                    {tags.map(tag => {
                       const isActive = selectedTags.includes(tag.name);
                       return (
                         <button 
-                          key={tag.name} 
+                          key={tag.id || tag.name} 
                           type="button" 
                           onClick={() => toggleTag(tag.name)}
                           className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all flex items-center gap-1 ${
@@ -310,5 +320,3 @@ export default function AddFAB({ customTrigger }: { customTrigger?: React.ReactN
     </>
   );
 }
-
-
