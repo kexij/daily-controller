@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { toggleTask, updateTaskDetails, deleteTask, toggleHabitCheckIn, resetDemoSandbox } from '@/app/actions';
+import { toggleTask, updateTaskDetails, deleteTask, toggleHabitCheckIn } from '@/app/actions';
 import { toast, confirmDialog } from '@/components/Feedback';
 import AddFAB from '@/components/AddFAB';
 import { getTaskSpanInfo, cleanDescription, parseSpanText } from '@/lib/task-utils';
@@ -85,51 +85,29 @@ export default function HomeClient({ user, tasks, habits, memos, overdueCount = 
     <div className="min-h-screen bg-[#EAECEF] flex justify-center selection:bg-blue-100 font-sans text-slate-800">
       <div className="w-full max-w-[480px] bg-[#F6F7F9] min-h-screen relative shadow-2xl flex flex-col pb-24 overflow-x-hidden">
       
-      {/* Header 问候语 */}
-        <div className="px-6 pt-12 pb-6 relative">
-          <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2 relative w-max">
-              {user ? (
-                `你好，${user.name || user.username}`
-              ) : (
-                <>
-                  你好，
-                  <span
-                    onClick={() => router.push('/login')}
-                    className="text-blue-600 hover:text-blue-700 cursor-pointer underline decoration-blue-200 underline-offset-4 transition-colors"
-                  >
-                    请登录
-                  </span>
-                </>
-              )}
-              <span className="animate-bounce origin-bottom-right">👋</span>
-              {isDemo && (
-                <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200 shadow-sm ml-1">
-                  展示样例
+        {/* Header 问候语 */}
+        <div className="px-6 pt-12 pb-6">
+          <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2 whitespace-nowrap">
+            {user ? (
+              `你好，${user.name || user.username}`
+            ) : (
+              <>
+                你好，
+                <span
+                  onClick={() => router.push('/login')}
+                  className="text-blue-600 hover:text-blue-700 cursor-pointer underline decoration-blue-200 underline-offset-4 transition-colors"
+                >
+                  请登录
                 </span>
-              )}
-            </h1>
-
-            {isDemo && (
-              <button
-                type="button"
-                onClick={async () => {
-                  if (await confirmDialog('确定要将预演数据重置为初始状态吗？此操作会清除您在本次免登录体验中新增或修改的内容。')) {
-                    await resetDemoSandbox();
-                    toast.success('已恢复为初始预演数据');
-                    router.refresh();
-                  }
-                }}
-                className="text-xs font-semibold text-slate-400 hover:text-slate-600 bg-white/80 hover:bg-white border border-slate-200/80 px-2.5 py-1 rounded-full shadow-sm transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
-                title="重置预演数据"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                重置
-              </button>
+              </>
             )}
-          </div>
+            <span className="animate-bounce origin-bottom-right">👋</span>
+            {isDemo && (
+              <span className="text-[11px] font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200/80 shadow-xs ml-0.5">
+                展示样例
+              </span>
+            )}
+          </h1>
           <p className="text-sm text-slate-500 font-medium mt-1">今天是 {mounted ? todayStr : ''}</p>
         </div>
 
